@@ -7,7 +7,7 @@ import time
 import threading
 
 class TrainPlot():
-    def __init__(self, update_period: float = 1, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str,dict[str,Any]] = {}):
+    def __init__(self, update_period: float = .5, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str,dict[str,Any]] = {}):
         '''
         Args:
             update_period: time in seconds between updates
@@ -128,7 +128,7 @@ class TrainPlot():
                     self.plot_args[key]['label'] = key
             else:
                 # append to existing data list
-                self.data[key].append((self.update_step, value))
+                self.data[key].append((update_step, value))
         self.update_step += 1
         self.new_data = True
 
