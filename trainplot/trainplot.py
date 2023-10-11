@@ -117,8 +117,9 @@ class TrainPlot():
                 if key not in self.plot_pos:
                     self.plot_pos[key] = (0, 0, 0)
                 # create twinx if necessary
-                if self.plot_pos[key][2] == 1:
-                    self.axs[self.plot_pos[key]] = self.axs[*self.plot_pos[key][:2],0].twinx()
+                pos = self.plot_pos[key]
+                if pos[2] == 1:
+                    self.axs[pos] = self.axs[pos[0],pos[1],0].twinx()
                 # add default plot arguments
                 if key not in self.plot_args:
                     self.plot_args[key] = {}
