@@ -1,6 +1,6 @@
 # trainplot
 
-Dynamically updating plots in Jupyter notebooks, e.g. for visualizing training progress. Inspired by [livelossplot](https://github.com/stared/livelossplot)
+Dynamically updating plots in Jupyter notebooks, e.g. for visualizing training progress. Inspired by [livelossplot](https://github.com/stared/livelossplot).
 
 ## Installation
 
@@ -28,6 +28,10 @@ for i in range(100):
 trainplot.close()
 ```
 
+<img src="https://github.com/JonasLoos/trainplot/assets/33965649/614f8ed4-8646-4100-b869-187ea89f1bb2" width="500">
+
+---
+
 It also works with `tqdm` and printing:
 
 ```python
@@ -42,12 +46,13 @@ for i in trange(50):
 trainplot.close()
 ```
 
+<img src="https://github.com/JonasLoos/trainplot/assets/33965649/7571efab-7a3f-4414-b537-a2dffd9e1bec" width="400">
+
+---
+
 You can also add a bunch of custumizations, e.g.:
 
 ```python
-from trainplot import TrainPlot
-import time
-
 trainplot = TrainPlot(
     update_period=.2,
     fig_args=dict(nrows=2, ncols=2, figsize=(10, 8), gridspec_kw={'height_ratios': [1, 1], 'width_ratios': [1, 1]}),
@@ -61,3 +66,5 @@ for i in range(100, 200):
 
 trainplot.close()
 ```
+
+<img src="https://github.com/JonasLoos/trainplot/assets/33965649/599314e2-d1c1-4044-a915-6316722a2324" width="600">
