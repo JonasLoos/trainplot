@@ -1,0 +1,31 @@
+[project]
+name = "trainplot"
+authors = [
+    {name = "Jonas Loos", email = "trainplot@jloos.de"}
+}
+description = "Dynamically updating plots in Jupyter notebooks, e.g. for visualizing training progress."
+readme = "README.md"
+license = "MIT"
+dynamic = ["version"]
+requires-python = ">=3.9"
+dependencie = [
+    "matplotlib",
+    "numpy",
+    "ipywidgets",
+    "ipython",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/JonasLoos/trainplot"
+"Bug Reports" = "https://github.com/JonasLoos/trainplot/issues"
+
+[build-system]
+requires = [
+    "setuptools>=61",
+    "setuptools-scm>=8.0",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+write_to = "trainplot/_version.py"
