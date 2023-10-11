@@ -11,13 +11,13 @@ class TrainPlot():
         '''
         Args:
             update_period: time in seconds between updates
-            fig_args: arguments passed to plt.subplots
+            fig_args: arguments passed to `plt.subplots`
             plot_pos: dictionary mapping data keys to plot positions
                 plot_pos[key] = (row, column, twinx)
                 row: row index of plot
                 column: column index of plot
                 twinx: if 1, plot on secondary y-axis
-            plot_args: dictionary mapping data keys to plot arguments
+            plot_args: arguments passed to `plt.plot`
         
         Examples:
             trainplot = TrainPlot(update_period=2, fig_args={'figsize': (10, 8)}, plot_pos={'loss': (0, 0, 0), 'accuracy': (0, 0, 1)}, plot_args={'loss': {'color': 'red'}, 'accuracy': {'color': 'blue'}})
