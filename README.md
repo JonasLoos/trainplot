@@ -2,6 +2,8 @@
 
 Dynamically updating plots in Jupyter notebooks, e.g. for visualizing training progress. Inspired by [livelossplot](https://github.com/stared/livelossplot). In comparison, trainplot has fewer options, but aims to be easier to use with better jupyter notebook support.
 
+Trainplot outputs the matplotlib figure to an `ipywidgets.Output` widget, so it doesn't interfere with other outputs like `tqdm` or print statements. To avoid wasting resources and flickering, the figure is only updated with a given `update_period`.
+
 
 ## Installation
 
