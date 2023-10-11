@@ -1,12 +1,14 @@
 # trainplot
 
-Dynamically updating plots in Jupyter notebooks, e.g. for visualizing training progress. Inspired by [livelossplot](https://github.com/stared/livelossplot).
+Dynamically updating plots in Jupyter notebooks, e.g. for visualizing training progress. Inspired by [livelossplot](https://github.com/stared/livelossplot). In comparison, trainplot has fewer options, but aims to be easier to use with better jupyter notebook support.
+
 
 ## Installation
 
 ```bash
 pip install trainplot
 ```
+
 
 ## Usage
 
