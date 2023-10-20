@@ -36,7 +36,7 @@ trainplot.close()
 
 ---
 
-It also works with `tqdm` and printing:
+It also works with e.g. `tqdm` and printing:
 
 ```python
 trainplot = TrainPlot()
