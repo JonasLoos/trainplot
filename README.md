@@ -41,10 +41,12 @@ There is a tf/keras callback:
 ```python
 from trainplot import TrainPlotKeras
 
+...
+
 model.fit(x_train, y_train, validation_data=(x_test, y_test), epochs=10, callbacks=[TrainPlotKeras()])
 ```
 
-<img src="" width="500">
+<img src="https://github.com/JonasLoos/trainplot/assets/33965649/4ddff79a-978e-434c-a6c3-571cf48c0892" width="500">
 
 ---
 
