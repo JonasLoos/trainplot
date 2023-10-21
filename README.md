@@ -36,7 +36,19 @@ trainplot.close()
 
 ---
 
-It also works with e.g. `tqdm` and printing:
+There is a tf/keras callback:
+
+```python
+from trainplot import TrainPlotKeras
+
+model.fit(x_train, y_train, validation_data=(x_test, y_test), epochs=10, callbacks=[TrainPlotKeras()])
+```
+
+<img src="" width="500">
+
+---
+
+It also works together with e.g. `tqdm.notebook` and printing:
 
 ```python
 trainplot = TrainPlot()
@@ -72,3 +84,7 @@ trainplot.close()
 ```
 
 <img src="https://github.com/JonasLoos/trainplot/assets/33965649/599314e2-d1c1-4044-a915-6316722a2324" width="600">
+
+---
+
+Check the [examples](examples) folder for example notebooks.
