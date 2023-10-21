@@ -1,7 +1,7 @@
 from typing import Any, Callable
 import matplotlib.pyplot as plt
 import numpy as np
-from ipywidgets import Output
+from ipywidgets import Output, Layout
 from IPython.display import display
 import time
 import threading
@@ -9,57 +9,56 @@ import threading
 
 
 class TrainPlotBase():
-    def __init__(self, update_period: float, threaded: bool, plot_init_fn: Callable[[], tuple[Any, Any]], plot_update_fn: Callable[[Any, Any, np.ndarray], Any]):
+    def __init__(self, update_period: float, threaded: bool, plot_init_fn: Callable[[], tuple[plt.Figure, Any]], plot_update_fn: Callable[[plt.Figure, Any, np.ndarray], plt.Figure]):
         '''
         Args:
             update_period: minimum time in seconds between plot updates.
-            threaded: if `True`, plot in a separate thread. If `False`, plot in the main thread (slower).
+            threaded: if `True`, plot in a separate thread (cann mess up output). If `False`, plot in the main thread (slower).
                 If you experience problems with other output vanishing or ending up in the plot, try setting this to `False`.
-            plot_init_fn: function that creates the plot
-            plot_update_fn: function that updates the plot
+            plot_init_fn: function that creates the plot.
+            plot_update_fn: function that updates the plot.
         '''
         # check arguments
         if update_period < 0:
             raise ValueError(f'update_period must be positive, got {update_period}')
 
-        # setup output widget
-        self.out = Output()
-        display(self.out)
-        self.fig, self.init_results = plot_init_fn()
-        self.out.append_display_data(self.fig)
-        # TODO: fix/limit size of output widget, to prevent flickering
-
         # setup properties
         self.plot_update_fn = plot_update_fn
         self.update_period = update_period
-        self.lines = []
-        self.new_data = False
-        self.plotting = False
+        self.new_data = False  # signals to the plotting thread that new data is available
         self.data = dict()
         self.update_step = 0
         self.threaded = threaded
-        self.plot_thread = None
-        self.stop_thread = False
-        self.last_update = 0  # only used if self.threaded is False
+        self.plot_thread = None  # thread that periodically updates the plot
+        self.stop_thread = False  # signals to the plotting thread that it should stop
+        self.last_update = 0  # time.time() of last plot update
+
+        # setup output widget
+        self.fig, self.init_results = plot_init_fn()
+        # TODO: move this to e.g. plot_init_fn, cuz I want to keep TrainPlotBase independent from matplotlib
+        fig_height = f'{self.fig.get_size_inches()[1]*1.04-0.04}in' if isinstance(self.fig, plt.Figure) else None  # fix/limit size of output widget, to prevent flickering
+        self.out = Output(layout=Layout(height=fig_height, overflow='hidden'))
+        display(self.out)
+        self._update_plot()
 
     def _update_plot(self):
-        self.out.outputs = ()
+        self.out.clear_output(wait=True)
         self.out.append_display_data(self.plot_update_fn(self.fig, self.init_results, self.data))
+        self.out.outputs = self.out.outputs[-1:]
 
     def _update_plot_periodically(self):
         '''Update the plot periodically. This function is made to be called in a separate thread.'''
         # plot as long as new data is coming in faster than the update period
         while self.new_data:
-            self.new_data = False  # possible race condition
+            self.new_data = False  # possible race condition (could cause plotting of even newer data than expected - not a problem)
             self.last_update = time.time()
             # plot all data
             self._update_plot()
             # wait for next update, while checking if the thread should stop
             while time.time() - self.last_update < self.update_period:
                 if self.stop_thread:
-                    break
+                    return  # exit thread
                 time.sleep(0.05)
-        self.plotting = False
 
     def update(self, **args):
         '''Update the data, which will be plotted as soon as `update_period` has passed since the last plot.
@@ -94,11 +93,10 @@ class TrainPlotBase():
 
         # plotting
         if self.threaded:
-            # start plotting thread if not already running
             self.new_data = True
-            if not self.plotting:
-                self.plotting = True  # possible race condition
-                self.plot_thread = threading.Thread(target=self._update_plot_periodically)
+            # start plotting thread if not already running
+            if self.plot_thread is None or not self.plot_thread.is_alive():
+                self.plot_thread = threading.Thread(target=self._update_plot_periodically)  # possible race condition (could spawn multiple threads)
                 self.plot_thread.start()
         else:
             # plot in main thread if enough time has passed since the last plot
@@ -112,37 +110,60 @@ class TrainPlotBase():
 
     def close(self):
         '''Do a final plot update.'''
-        # prevent waiting, by setting stop_thread to True, which causes the thread to exit as soon as all data is plotted
         if self.threaded:
+            # prevent waiting, by setting stop_thread to True, which causes the thread to exit immediately
             self.stop_thread = True
             if self.plot_thread is not None:
                 self.plot_thread.join()
-        else:
-            # final update
-            self.plot_update_fn(self.fig, self.init_results, self.data)
+        # final update
+        self._update_plot()
+        plt.close(self.fig)
 
 
 
 
 class TrainPlot(TrainPlotBase):
-    def __init__(self, update_period: float = .5, threaded: bool = True, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str,dict[str,Any]] = {}):
+    def __init__(self, update_period: float = .5, threaded: bool = False, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str,dict[str,Any]] = {}, axis_custumization: dict[tuple[int,int,int], Callable[[plt.Axes], None]] = {}):
         '''
         Args:
-            update_period: minimum time in seconds between updates. If 0, plot immediately after each data update.
-            fig_args: arguments passed to `plt.subplots`
-            plot_pos: dictionary mapping data keys to plot positions
+            update_period: minimum time in seconds between updates. 
+                Setting this to a low value (< 0.5) can significantly slow down training.
+            threaded: if `True`, plot in a separate thread (faster). If `False`, plot in the main thread (slower).
+                If you experience problems with other output vanishing or ending up in the plot, try setting this to `False`.
+            fig_args: arguments passed to `plt.subplots`.
+            plot_pos: dictionary mapping data keys to plot positions.
                 plot_pos[key] = (row, column, twinx)
-                row: row index of plot
-                column: column index of plot
-                twinx: if 1, plot on secondary y-axis
-            plot_args: arguments passed to `plt.plot`
+                    row: row index of plot
+                    column: column index of plot
+                    twinx: if 1, plot on secondary y-axis
+            plot_args: arguments passed to `plt.plot`.
+            axis_custumization: dictionary mapping plot positions to functions that customize the axis.
         
         Examples:
-            trainplot = TrainPlot(update_period=2, fig_args={'figsize': (10, 8)}, plot_pos={'loss': (0, 0, 0), 'accuracy': (0, 0, 1)}, plot_args={'loss': {'color': 'red'}, 'accuracy': {'color': 'blue'}})
-            trainplot = TrainPlot(
-                fig_args=dict(nrows=2, ncols=2, figsize=(10, 10), gridspec_kw={'height_ratios': [1, 2], 'width_ratios': [1, 1]}),
-                plot_pos={'loss': (0, 0, 0), 'accuracy': (0, 1, 0), 'val_loss': (1, 0, 0), 'val_accuracy': (1, 1, 0)}
-            )
+        ```
+        # default
+        trainplot = TrainPlot()
+        # custom with twinx
+        trainplot = TrainPlot(
+            update_period=2,
+            fig_args={'figsize': (10, 8)},
+            plot_pos={'loss': (0, 0, 0), 'accuracy': (0, 0, 1)},
+            plot_args={'loss': {'color': 'red'}, 'accuracy': {'color': 'blue'}}
+        )
+        # custom with 4 axes
+        trainplot = TrainPlot(
+            fig_args=dict(
+                nrows=2,
+                ncols=2,
+                figsize=(10, 10),
+                gridspec_kw={'height_ratios': [1, 2], 'width_ratios': [1, 1]}
+            ),
+            plot_pos={
+                'loss': (0, 0, 0), 'accuracy': (0, 1, 0),
+                'val_loss': (1, 0, 0), 'val_accuracy': (1, 1, 0)
+            }
+        )
+        ```
         '''
         for key, value in plot_pos.items():
             if len(value) != 3:
@@ -155,29 +176,47 @@ class TrainPlot(TrainPlotBase):
             axs = np.full((*np.shape(axs_list), 2), None, dtype=object)
             axs[:, :, 0] = axs_list
             # create twinx where necessary
-            for _, pos in plot_pos.items():
-                if pos[2] == 1 and axs[pos[0], pos[1], 0] is None:
+            for pos in plot_pos.values():
+                if pos[2] == 1 and axs[pos] is None and axs[pos[0], pos[1], 0] is not None:
                     axs[pos] = axs[pos[0], pos[1], 0].twinx()
+            # custom axis custumization
+            for pos, func in axis_custumization.items():
+                func(axs[pos])
+            fig.tight_layout()
             return fig, axs
 
         def default_plot_update_fn(fig, axs, data: np.ndarray):
             # clear axes
             for ax in axs.flatten():
                 if ax is not None:
-                    ax.clear()
+                    # clear lines, so they can be redrawn
+                    for line in ax.get_lines():
+                        line.remove()
+                    # reset color cycle, so that the colors don't change
+                    ax.set_prop_cycle(None)
             # plot data
             for key, value in data.items():
                 ax = axs[plot_pos.get(key, (0, 0, 0))]
                 args = {'label': key} | plot_args.get(key, {})
                 ax.plot(*zip(*value), **args)
             # update legend
-            for ax in axs.flatten():
-                if ax is not None and len(ax.get_legend_handles_labels()[1]) > 0:
-                    ax.legend()
-                    
+            for axs_row in axs:
+                for ax in axs_row:
+                    ax1, ax2 = ax
+                    lines = []
+                    if ax1 is not None:
+                        lines += ax1.get_lines()
+                    if ax2 is not None:
+                        lines += ax2.get_lines()
+                    if len(lines) > 0:
+                        if ax1 is not None:
+                            ax1.legend(handles=lines)
+                        else:
+                            ax2.legend(handles=lines)
+            # return figure to be displayed
             return fig
 
-
+        # call super constructor with default plot functions
         super().__init__(
             update_period=update_period,
             threaded=threaded,
