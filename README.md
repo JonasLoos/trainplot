@@ -20,7 +20,7 @@ In your Jupyter notebook import it using:
 from trainplot import TrainPlot
 ```
 
-Then you can use it like this:
+Then you can use it like this ([example notebook](examples/basic-example.ipynb)):
 
 ```python
 trainplot = TrainPlot()
@@ -36,7 +36,7 @@ trainplot.close()
 
 ---
 
-There is a tf/keras callback:
+There is a tf/keras callback ([example notebook](examples/tf-keras-mnist-example.ipynb)):
 
 ```python
 from trainplot import TrainPlotKeras
@@ -50,7 +50,7 @@ model.fit(x_train, y_train, validation_data=(x_test, y_test), epochs=10, callbac
 
 ---
 
-It also works together with e.g. `tqdm.notebook` and printing:
+It also works together with e.g. `tqdm.notebook` and printing ([example notebook](examples/separate-output-example.ipynb)):
 
 ```python
 trainplot = TrainPlot()
@@ -68,7 +68,7 @@ trainplot.close()
 
 ---
 
-You can also add a bunch of custumizations, e.g.:
+You can also add a bunch of custumizations, e.g. ([example notebook](examples/4plots-example.ipynb)):
 
 ```python
 trainplot = TrainPlot(
@@ -89,4 +89,4 @@ trainplot.close()
 
 ---
 
-Check the [examples](examples) folder for example notebooks.
+There is also support for [threading](examples/threading-example.ipynb) to improve runtime performance by parallelization.
