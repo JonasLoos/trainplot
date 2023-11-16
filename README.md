@@ -2,8 +2,6 @@
 
 Dynamically updating plots in Jupyter notebooks, e.g. for visualizing training progress. Inspired by [livelossplot](https://github.com/stared/livelossplot), and aims to be easier to use with better jupyter notebook support.
 
-Trainplot outputs the matplotlib figure to an `ipywidgets.Output` widget, so it doesn't interfere with other outputs like `tqdm` or print statements. To avoid wasting resources and flickering, the figure is only updated with a given `update_period`.
-
 
 ## Installation
 
@@ -22,7 +20,7 @@ This is a simple example ([example notebook](examples/basic-example.ipynb)):
 from trainplot import plot
 from time import sleep
 
-for i in range(500):
+for i in range(50):
     plot(loss = 1/(i+1), acc = 1-1/(.01*i**2+1))
     sleep(.1)
 ```
@@ -87,3 +85,10 @@ for i in range(100, 200):
 More:
 * When using a Trainplot object, you can also put the plot into a separate cell than the training loop ([example notebook](examples/separate-output-example.ipynb))
 * There is also support for [threading](examples/threading-example.ipynb) to improve runtime performance by parallelization.
+
+
+## How it works
+
+Trainplot outputs the matplotlib figure to an `ipywidgets.Output` widget, so it doesn't interfere with other outputs like `tqdm` or print statements. To avoid wasting resources and flickering, the figure is only updated with a given `update_period`. This can also be done from a separate `threading.Thread`, to not block the main thread.
+A `post_run_cell` callback is added to the `IPython` instance, so that all updated TrainPlot figures include all new data when a cell execution is finished.
+When using `trainplot.plot`, a TrainPlot object is created for the current cell and cell-execution-count.
