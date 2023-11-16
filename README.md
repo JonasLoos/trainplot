@@ -27,7 +27,7 @@ for i in range(500):
     sleep(.1)
 ```
 
-<img src="TODO" width="500">
+<img src="https://github.com/JonasLoos/trainplot/assets/33965649/935e8d52-0c37-4469-9cb8-24fa77b467ff" width="500">
 
 ---
 
