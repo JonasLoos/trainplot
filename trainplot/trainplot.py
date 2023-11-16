@@ -3,40 +3,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from ipywidgets import Output, Layout
 from IPython.display import display
+from IPython import get_ipython
 import time
 import threading
-
-
-
-main_trainplot = None
-
-def plot(new=False, **args):
-    '''Create or update a default TrainPlot object.
-    
-    Compared to a `TrainPlot` object, no initialization or closing is required.
-
-    Args:
-        new: if `True`, create a new TrainPlot object. If `False`, update the existing TrainPlot object.
-        **args: arguments passed to `update` function of TrainPlot object.
-            NAME=NEW_VALUE, ...: Where NAME is the name of the data to update and NEW_VALUE is the new value to append to the data list.
-
-    Examples:
-    ```python
-    for i in range(5):
-        plot(i=i)
-    # if you want to create a second plot in the notebook, use `new=True`
-    plot(new=True)
-    for j in range(1,6):
-        plot(j=j**2)
-    ```
-    '''
-    global main_trainplot
-    if main_trainplot is None or new:
-        main_trainplot = TrainPlot(update_period=0)
-        if len(args) > 0:
-            main_trainplot.update(**args)
-    else:
-        main_trainplot.update(**args)
+from collections import defaultdict
 
 
 
@@ -137,6 +107,10 @@ class TrainPlotBase():
                 self.last_update = time.time()
                 self.update_plot()
 
+        # mark this TrainPlot object as active
+        global currently_active_trainplot_objects
+        currently_active_trainplot_objects.add(self)
+
     def __call__(self, **args):
         '''Shutcut for `update` function.'''
         self.update(**args)
@@ -155,7 +129,7 @@ class TrainPlotBase():
 
 
 class TrainPlot(TrainPlotBase):
-    def __init__(self, update_period: float = .5, threaded: bool = False, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str,dict[str,Any]] = {}, axis_custumization: dict[tuple[int,int,int], Callable[[plt.Axes], None]] = {}):
+    def __init__(self, update_period: float = 0.5, threaded: bool = False, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str,dict[str,Any]] = {}, axis_custumization: dict[tuple[int,int,int], Callable[[plt.Axes], None]] = {}):
         '''
         Args:
             update_period: minimum time in seconds between updates. 
@@ -255,3 +229,44 @@ class TrainPlot(TrainPlotBase):
             plot_init_fn=default_plot_init_fn,
             plot_update_fn=default_plot_update_fn
         )
+
+
+def plot(**args):
+    '''Create or update an unnamed TrainPlot object for the current cell.
+
+    Compared to a TrainPlot object, this function doesn't need initialization.
+    However, therefore, no customizations are possible.
+
+    Args:
+        NAME=NEW_VALUE, ...: Where NAME is the name of the data to update and NEW_VALUE is the new value to append to the data list.
+
+    Examples:
+    ```python
+    for i in range(5):
+        plot(i=i)
+    ```
+    '''
+    global unnamed_trainplot_objects
+    # get current TrainPlot object
+    i = ipython_instance.execution_count
+    if i not in unnamed_trainplot_objects:
+        unnamed_trainplot_objects[i] = TrainPlot()
+    # update TrainPlot object
+    unnamed_trainplot_objects[i].update(**args)
+
+
+
+def close_ipython_cell():
+    '''This closes all TrainPlot objects that were updated in the current cell. This makes sure all data is plotted before the cell is finished.'''
+    global currently_active_trainplot_objects
+    for tp in currently_active_trainplot_objects:
+        tp.close()
+    currently_active_trainplot_objects.clear()
+
+
+
+ipython_instance = get_ipython()
+ipython_instance.events.register('post_run_cell', close_ipython_cell)
+
+currently_active_trainplot_objects: set[TrainPlotBase] = set()
+unnamed_trainplot_objects = defaultdict(lambda: TrainPlot)
