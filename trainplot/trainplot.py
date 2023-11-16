@@ -8,6 +8,38 @@ import threading
 
 
 
+main_trainplot = None
+
+def plot(new=False, **args):
+    '''Create or update a default TrainPlot object.
+    
+    Compared to a `TrainPlot` object, no initialization or closing is required.
+
+    Args:
+        new: if `True`, create a new TrainPlot object. If `False`, update the existing TrainPlot object.
+        **args: arguments passed to `update` function of TrainPlot object.
+            NAME=NEW_VALUE, ...: Where NAME is the name of the data to update and NEW_VALUE is the new value to append to the data list.
+
+    Examples:
+    ```python
+    for i in range(5):
+        plot(i=i)
+    # if you want to create a second plot in the notebook, use `new=True`
+    plot(new=True)
+    for j in range(1,6):
+        plot(j=j**2)
+    ```
+    '''
+    global main_trainplot
+    if main_trainplot is None or new:
+        main_trainplot = TrainPlot(update_period=0)
+        if len(args) > 0:
+            main_trainplot.update(**args)
+    else:
+        main_trainplot.update(**args)
+
+
+
 class TrainPlotBase():
     def __init__(self, update_period: float, threaded: bool, plot_init_fn: Callable[[], tuple[plt.Figure, Any]], plot_update_fn: Callable[[plt.Figure, Any, np.ndarray], plt.Figure]):
         '''
@@ -39,9 +71,10 @@ class TrainPlotBase():
         fig_height = f'{self.fig.get_size_inches()[1]*1.04-0.04}in' if isinstance(self.fig, plt.Figure) else None  # fix/limit size of output widget, to prevent flickering
         self.out = Output(layout=Layout(height=fig_height, overflow='hidden'))
         display(self.out)
-        self._update_plot()
+        self.update_plot()
+        plt.close(self.fig)
 
-    def _update_plot(self):
+    def update_plot(self):
         self.out.clear_output(wait=True)
         self.out.append_display_data(self.plot_update_fn(self.fig, self.init_results, self.data))
         self.out.outputs = self.out.outputs[-1:]
@@ -53,7 +86,7 @@ class TrainPlotBase():
             self.new_data = False  # possible race condition (could cause plotting of even newer data than expected - not a problem)
             self.last_update = time.time()
             # plot all data
-            self._update_plot()
+            self.update_plot()
             # wait for next update, while checking if the thread should stop
             while time.time() - self.last_update < self.update_period:
                 if self.stop_thread:
@@ -102,7 +135,7 @@ class TrainPlotBase():
             # plot in main thread if enough time has passed since the last plot
             if time.time() - self.last_update > self.update_period:
                 self.last_update = time.time()
-                self._update_plot()
+                self.update_plot()
 
     def __call__(self, **args):
         '''Shutcut for `update` function.'''
@@ -116,8 +149,7 @@ class TrainPlotBase():
             if self.plot_thread is not None:
                 self.plot_thread.join()
         # final update
-        self._update_plot()
-        plt.close(self.fig)
+        self.update_plot()
 
 
 
