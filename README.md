@@ -12,8 +12,6 @@ pip install trainplot
 
 ## Usage
 
-Trainplot is designed to be used in Jupyter notebooks.
-
 This is a simple example ([example notebook](examples/basic-example.ipynb)):
 
 ```python
@@ -29,7 +27,7 @@ for i in range(50):
 
 ---
 
-There is a tf/keras callback ([example notebook](examples/tf-keras-mnist-example.ipynb)):
+Example for the tf/keras callback ([example notebook](examples/tf-keras-mnist-example.ipynb)):
 
 ```python
 from trainplot import TrainPlotKeras
