@@ -22,12 +22,12 @@ This is a simple example ([example notebook](examples/basic-example.ipynb)):
 from trainplot import plot
 from time import sleep
 
-for i in range(100):
-    plot(i = i+random.random()*10, root = i**.5*3)
-    sleep(0.1)
+for i in range(500):
+    plot(loss = 1/(i+1), acc = 1-1/(.01*i**2+1))
+    sleep(.1)
 ```
 
-<img src="https://github.com/JonasLoos/trainplot/assets/33965649/614f8ed4-8646-4100-b869-187ea89f1bb2" width="500">
+<img src="TODO" width="500">
 
 ---
 
@@ -82,8 +82,8 @@ for i in range(100, 200):
 
 <img src="https://github.com/JonasLoos/trainplot/assets/33965649/599314e2-d1c1-4044-a915-6316722a2324" width="600">
 
-When using a Trainplot object, you can also put the plot into a separate cell than the training loop ([example notebook](examples/separate-output-example.ipynb))
-
 ---
 
-There is also support for [threading](examples/threading-example.ipynb) to improve runtime performance by parallelization.
+More:
+* When using a Trainplot object, you can also put the plot into a separate cell than the training loop ([example notebook](examples/separate-output-example.ipynb))
+* There is also support for [threading](examples/threading-example.ipynb) to improve runtime performance by parallelization.

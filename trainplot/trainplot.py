@@ -256,7 +256,7 @@ def plot(**args):
 
 
 
-def close_ipython_cell():
+def close_ipython_cell(*args, **kwargs):
     '''This closes all TrainPlot objects that were updated in the current cell. This makes sure all data is plotted before the cell is finished.'''
     global currently_active_trainplot_objects
     for tp in currently_active_trainplot_objects:
