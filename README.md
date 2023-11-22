@@ -81,9 +81,9 @@ for i in range(100, 200):
 ---
 
 More:
-* When using a Trainplot object, you can also put the plot into a separate cell than the training loop ([example notebook](examples/separate-output-example.ipynb))
-* There is also support for [threading](examples/threading-example.ipynb) to improve runtime performance by parallelization.
-
+* When using a Trainplot object, you can also put the plot into a separate cell than the training loop: [example notebook](examples/separate-output-example.ipynb)
+* Support for [threading](examples/threading-example.ipynb) to improve runtime performance by parallelization
+* Experimental plotly support (`from trainplot.trainplot import TrainPlotPlotlyExperimental`): [example notebook](examples/plotly-example.ipynb)
 
 ## How it works
 
