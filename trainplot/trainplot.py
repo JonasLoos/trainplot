@@ -11,21 +11,18 @@ from collections import defaultdict
 
 
 class TrainPlotBase():
-    def __init__(self, update_period: float, threaded: bool, plot_init_fn: Callable[[], tuple[Any, dict]], plot_update_fn: Callable[[Any, np.ndarray], Any]):
+    def __init__(self, update_period: float = 0.5, threaded: bool = False):
         '''
         Args:
             update_period: minimum time in seconds between plot updates.
             threaded: if `True`, plot in a separate thread (cann mess up output). If `False`, plot in the main thread (slower).
                 If you experience problems with other output vanishing or ending up in the plot, try setting this to `False`.
-            plot_init_fn: function that creates the plot.
-            plot_update_fn: function that updates the plot.
         '''
         # check arguments
         if update_period < 0:
             raise ValueError(f'update_period must be positive, got {update_period}')
 
         # setup properties
-        self.plot_update_fn = plot_update_fn
         self.update_period = update_period
         self.new_data = False  # signals to the plotting thread that new data is available
         self.data = dict()
@@ -35,23 +32,16 @@ class TrainPlotBase():
         self.stop_thread = False  # signals to the plotting thread that it should stop
         self.last_update = 0  # time.time() of last plot update
 
-        # setup output widget, if running in IPython
-        if ipython_instance is not None:
-            self.figure_data, layout_args = plot_init_fn()
-            self.out = Output(layout=Layout(**layout_args))
-            display(self.out)
-        else:
-            self.figure_data = None
-            self.out = None
+        self.init_plot()
         self.update_plot()
+
+    def init_plot(self):
+        '''Create the plot.'''
+        raise NotImplementedError('init_plot must be implemented by subclass')
 
     def update_plot(self):
         '''Update the plot with the current data.'''
-        if self.out is None:
-            return
-        self.out.clear_output(wait=True)
-        self.out.append_display_data(self.plot_update_fn(self.figure_data, self.data))
-        self.out.outputs = self.out.outputs[-1:]
+        raise NotImplementedError('update_plot must be implemented by subclass')
 
     def _update_plot_periodically(self):
         '''Update the plot periodically. This function is made to be called in a separate thread.'''
@@ -131,8 +121,35 @@ class TrainPlotBase():
 
 
 
+class TrainPlotOutputWidget(TrainPlotBase):
+    '''A wrapper around TrainPlotBase that displays the plot in an output widget.'''
+    def __init__(self, *args, plot_init_fn: Callable[[], tuple[Any, dict]], plot_update_fn: Callable[[Any, np.ndarray], Any], **kwargs):
+        self.plot_init_fn = plot_init_fn
+        self.plot_update_fn = plot_update_fn
+        super().__init__(*args, **kwargs)
+    
+    def init_plot(self):
+        '''Create the plot.'''
+        # setup output widget, if running in IPython
+        if ipython_instance is not None:
+            self.figure_data, layout_args = self.plot_init_fn()
+            self.out = Output(layout=Layout(**layout_args))
+            display(self.out)
+        else:
+            self.figure_data = None
+            self.out = None
 
-class TrainPlot(TrainPlotBase):
+    def update_plot(self):
+        '''Update the plot with the current data.'''
+        if self.out is None:
+            return
+        self.out.clear_output(wait=True)
+        self.out.append_display_data(self.plot_update_fn(self.figure_data, self.data))
+        self.out.outputs = self.out.outputs[-1:]
+
+
+
+class TrainPlot(TrainPlotOutputWidget):
     def __init__(self, update_period: float = 0.5, threaded: bool = False, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str,dict[str,Any]] = {}, axis_custumization: dict[tuple[int,int,int], Callable[[plt.Axes], None]] = {}):
         '''
         Args:
@@ -229,14 +246,37 @@ class TrainPlot(TrainPlotBase):
                             ax2.legend(handles=lines)
             # return figure to be displayed
             return fig
-
-        # call super constructor with default plot functions
+        
         super().__init__(
             update_period=update_period,
             threaded=threaded,
             plot_init_fn=default_plot_init_fn,
             plot_update_fn=default_plot_update_fn
         )
+
+
+
+class TrainPlotPlotlyExperimental(TrainPlotBase):
+    '''Experimental: Plot using plotly.'''
+    def init_plot(self):
+        import plotly.graph_objects as go
+        self.traces = set()
+        self.fig = go.FigureWidget(layout=go.Layout(height=450))
+        display(self.fig)
+    
+    def update_plot(self):
+        import plotly.graph_objects as go
+        for key, value in self.data.items():
+            if key not in self.traces:
+                self.fig.add_trace(go.Scatter(x=[x for x, _ in value], y=[y for _, y in value], name=key))
+                self.traces.add(key)
+            else:
+                for trace in self.fig.data:
+                    if trace.name == key:
+                        trace.x = [x for x, _ in value]
+                        trace.y = [y for _, y in value]
+                        break
+
 
 
 def plot(**args):
@@ -283,6 +323,7 @@ if ipython_instance is not None:
     ipython_instance.events.register('post_run_cell', close_ipython_cell)
 else:
     print('WARNING: It seems you are running trainplot outside of an IPython environment. No plots will be displayed.')
+
 
 # global variables
 currently_active_trainplot_objects: set[TrainPlotBase] = set()
