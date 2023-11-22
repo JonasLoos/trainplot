@@ -11,7 +11,7 @@ from collections import defaultdict
 
 
 class TrainPlotBase():
-    def __init__(self, update_period: float, threaded: bool, plot_init_fn: Callable[[], tuple[plt.Figure, Any]], plot_update_fn: Callable[[plt.Figure, Any, np.ndarray], plt.Figure]):
+    def __init__(self, update_period: float, threaded: bool, plot_init_fn: Callable[[], tuple[Any, dict]], plot_update_fn: Callable[[Any, np.ndarray], Any]):
         '''
         Args:
             update_period: minimum time in seconds between plot updates.
@@ -35,18 +35,22 @@ class TrainPlotBase():
         self.stop_thread = False  # signals to the plotting thread that it should stop
         self.last_update = 0  # time.time() of last plot update
 
-        # setup output widget
-        self.fig, self.init_results = plot_init_fn()
-        # TODO: move this to e.g. plot_init_fn, cuz I want to keep TrainPlotBase independent from matplotlib
-        fig_height = f'{self.fig.get_size_inches()[1]*1.04-0.04}in' if isinstance(self.fig, plt.Figure) else None  # fix/limit size of output widget, to prevent flickering
-        self.out = Output(layout=Layout(height=fig_height, overflow='hidden'))
-        display(self.out)
+        # setup output widget, if running in IPython
+        if ipython_instance is not None:
+            self.figure_data, layout_args = plot_init_fn()
+            self.out = Output(layout=Layout(**layout_args))
+            display(self.out)
+        else:
+            self.figure_data = None
+            self.out = None
         self.update_plot()
-        plt.close(self.fig)
 
     def update_plot(self):
+        '''Update the plot with the current data.'''
+        if self.out is None:
+            return
         self.out.clear_output(wait=True)
-        self.out.append_display_data(self.plot_update_fn(self.fig, self.init_results, self.data))
+        self.out.append_display_data(self.plot_update_fn(self.figure_data, self.data))
         self.out.outputs = self.out.outputs[-1:]
 
     def _update_plot_periodically(self):
@@ -189,9 +193,13 @@ class TrainPlot(TrainPlotBase):
             for pos, func in axis_custumization.items():
                 func(axs[pos])
             fig.tight_layout()
-            return fig, axs
+            plt.close(fig)  # close figure, to prevent jupyter from displaying it a second time
+            fig_height = f'{fig.get_size_inches()[1]*1.04-0.04}in'  # fix/limit size of output widget, to prevent flickering
+            layout_args = dict(height=fig_height, overflow='hidden')
+            return (fig, axs), layout_args
 
-        def default_plot_update_fn(fig, axs, data: np.ndarray):
+        def default_plot_update_fn(figure_data, data: np.ndarray):
+            fig, axs = figure_data
             # clear axes
             for ax in axs.flatten():
                 if ax is not None:
@@ -246,11 +254,16 @@ def plot(**args):
         plot(i=i)
     ```
     '''
-    global unnamed_trainplot_objects
+    # check if running in IPython
+    if ipython_instance is None:
+        return  # do nothing
+
     # get current TrainPlot object
+    global unnamed_trainplot_objects
     i = ipython_instance.execution_count
     if i not in unnamed_trainplot_objects:
         unnamed_trainplot_objects[i] = TrainPlot()
+
     # update TrainPlot object
     unnamed_trainplot_objects[i].update(**args)
 
@@ -264,9 +277,13 @@ def close_ipython_cell(*args, **kwargs):
     currently_active_trainplot_objects.clear()
 
 
-
+# setup ipython hooks
 ipython_instance = get_ipython()
-ipython_instance.events.register('post_run_cell', close_ipython_cell)
+if ipython_instance is not None:
+    ipython_instance.events.register('post_run_cell', close_ipython_cell)
+else:
+    print('WARNING: It seems you are running trainplot outside of an IPython environment. No plots will be displayed.')
 
+# global variables
 currently_active_trainplot_objects: set[TrainPlotBase] = set()
 unnamed_trainplot_objects = defaultdict(lambda: TrainPlot)
