@@ -149,7 +149,7 @@ class TrainPlotOutputWidget(TrainPlotBase):
 
 
 
-class TrainPlot(TrainPlotOutputWidget):
+class TrainPlotMpl(TrainPlotOutputWidget):
     def __init__(self, update_period: float = 0.5, threaded: bool = False, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str,dict[str,Any]] = {}, axis_custumization: dict[tuple[int,int,int], Callable[[plt.Axes], None]] = {}):
         '''
         Args:
@@ -256,26 +256,22 @@ class TrainPlot(TrainPlotOutputWidget):
 
 
 
-class TrainPlotPlotlyExperimental(TrainPlotBase):
+class TrainPlotPlotly(TrainPlotBase):
     '''Experimental: Plot using plotly.'''
     def init_plot(self):
         import plotly.graph_objects as go
-        self.traces = set()
         self.fig = go.FigureWidget(layout=go.Layout(height=450))
         display(self.fig)
     
     def update_plot(self):
         import plotly.graph_objects as go
+        traces = {trace.name: trace for trace in self.fig.data}
         for key, value in self.data.items():
-            if key not in self.traces:
-                self.fig.add_trace(go.Scatter(x=[x for x, _ in value], y=[y for _, y in value], name=key))
-                self.traces.add(key)
+            if key in traces:
+                traces[key].x = [x for x, _ in value]
+                traces[key].y = [y for _, y in value]
             else:
-                for trace in self.fig.data:
-                    if trace.name == key:
-                        trace.x = [x for x, _ in value]
-                        trace.y = [y for _, y in value]
-                        break
+                self.fig.add_trace(go.Scatter(x=[x for x, _ in value], y=[y for _, y in value], name=key))
 
 
 
@@ -302,7 +298,7 @@ def plot(**args):
     global unnamed_trainplot_objects
     i = ipython_instance.execution_count
     if i not in unnamed_trainplot_objects:
-        unnamed_trainplot_objects[i] = TrainPlot()
+        unnamed_trainplot_objects[i] = TrainPlotPlotly()
 
     # update TrainPlot object
     unnamed_trainplot_objects[i].update(**args)
