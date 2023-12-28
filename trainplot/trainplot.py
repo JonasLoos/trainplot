@@ -165,7 +165,7 @@ class TrainPlotMpl(TrainPlotOutputWidget):
                     twinx: if 1, plot on secondary y-axis
             plot_args: arguments passed to `plt.plot`.
             axis_custumization: dictionary mapping plot positions to functions that customize the axis.
-        
+
         Examples:
         ```
         # default
@@ -257,21 +257,75 @@ class TrainPlotMpl(TrainPlotOutputWidget):
 
 
 class TrainPlotPlotly(TrainPlotBase):
-    '''Experimental: Plot using plotly.'''
+    '''Plot using plotly.'''
+    def __init__(self, update_period: float = 0.5, threaded: bool = False, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str, dict[str,Any]] = {}):
+        '''
+        Args:
+            update_period: minimum time in seconds between updates. 
+                Setting this to a low value (< 0.5) can significantly slow down training.
+            threaded: if `True`, plot in a separate thread (faster). If `False`, plot in the main thread (slower).
+                If you experience problems with other output vanishing or ending up in the plot, try setting this to `False`.
+            fig_args: arguments passed to `go.FigureWidget`. Default: `{'layout': {'height': 450}}`.
+            plot_pos: dictionary mapping data keys to plot positions.
+                plot_pos[key] = (row, column, twinx)
+                    row: row index of plot
+                    column: column index of plot
+                    secondary y-axis: if 1, plot on secondary y-axis
+            plot_args: arguments passed to `fig.add_trace` (by default `go.Scatter`).
+
+        Examples:
+        ```
+        tp = TrainPlotPlotly(
+            update_period=0.2,
+            fig_args={'layout': {'title': 'My Train Plot', 'height': 600}},
+            plot_pos={'acc': (0, 0, 0), 'loss': (0, 0, 1), 'val_acc': (0, 0, 0), 'val_loss': (0, 0, 1), 'stuff': (1, 0, 0)},
+            plot_args={'acc': {'name': 'accuracy', 'line': {'color':'gold'}}, 'stuff': {'type': 'bar'}})
+        tp.fig.update_yaxes(row=2, col=1, type="log")  # log scale
+        ...
+        tp(acc=50, val_acc=40, loss=0.5, val_loss=0.5, stuff=42)
+        tp(acc=70, val_acc=50, loss=0.3, val_loss=0.35, stuff=420)
+        ```
+        '''
+        self.fig_args = fig_args
+        self.plot_pos = plot_pos
+        self.plot_args = plot_args
+        super().__init__(update_period=update_period, threaded=threaded)
+
     def init_plot(self):
         import plotly.graph_objects as go
-        self.fig = go.FigureWidget(layout=go.Layout(height=450))
+        from plotly.subplots import make_subplots
+        rows = max([0] + [x[0] for x in self.plot_pos.values()]) + 1
+        cols = max([0] + [x[1] for x in self.plot_pos.values()]) + 1
+        self.fig = go.FigureWidget(make_subplots(
+            rows=rows,
+            cols=cols,
+            specs = [[{"secondary_y": True}]*cols]*rows,
+            figure = go.Figure(**self.fig_args),
+        ))
         display(self.fig)
     
     def update_plot(self):
         import plotly.graph_objects as go
         traces = {trace.name: trace for trace in self.fig.data}
         for key, value in self.data.items():
-            if key in traces:
-                traces[key].x = [x for x, _ in value]
-                traces[key].y = [y for _, y in value]
+            name = self.plot_args.get(key, {}).get('name', key)
+            if name in traces:
+                # update existing trace
+                traces[name].x = [x for x, _ in value]
+                traces[name].y = [y for _, y in value]
             else:
-                self.fig.add_trace(go.Scatter(x=[x for x, _ in value], y=[y for _, y in value], name=key))
+                # add new trace
+                row, col, secy = self.plot_pos.get(key, (0,0,0))
+                self.fig.add_trace(
+                    dict(
+                        x = [x for x, _ in value],
+                        y = [y for _, y in value],
+                        **({'name': key} | self.plot_args.get(key, {}))
+                    ),
+                    row=row+1,
+                    col=col+1,
+                    secondary_y=secy
+                )
 
 
 
@@ -290,18 +344,13 @@ def plot(**args):
         plot(i=i)
     ```
     '''
-    # check if running in IPython
+    # check if running in IPython and do nothing if not
     if ipython_instance is None:
-        return  # do nothing
+        return
 
-    # get current TrainPlot object
+    # update TrainPlot object for current cell
     global unnamed_trainplot_objects
-    i = ipython_instance.execution_count
-    if i not in unnamed_trainplot_objects:
-        unnamed_trainplot_objects[i] = TrainPlotPlotly()
-
-    # update TrainPlot object
-    unnamed_trainplot_objects[i].update(**args)
+    unnamed_trainplot_objects[ipython_instance.execution_count].update(**args)
 
 
 
@@ -323,4 +372,4 @@ else:
 
 # global variables
 currently_active_trainplot_objects: set[TrainPlotBase] = set()
-unnamed_trainplot_objects = defaultdict(lambda: TrainPlot)
+unnamed_trainplot_objects = defaultdict(TrainPlotPlotly)
