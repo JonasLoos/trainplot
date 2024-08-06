@@ -1,7 +1,7 @@
 from ._version import __version__, __version_tuple__
 
 from .trainplot import TrainPlotMpl, TrainPlotPlotly, TrainPlotBase, plot
-TrainPlot = TrainPlotMpl
+TrainPlot = TrainPlotPlotly
 
 def TrainPlotKeras(*args, **kwargs):
     """TrainPlot callback for Keras.
