@@ -82,11 +82,10 @@ for i in range(100, 200):
 
 More:
 * When using a Trainplot object, you can also put the plot into a separate cell than the training loop: [example notebook](examples/separate-output-example.ipynb)
-* Support for [threading](examples/threading-example.ipynb) to improve runtime performance by parallelization
 * Experimental plotly support (`from trainplot.trainplot import TrainPlotPlotlyExperimental`): [example notebook](examples/plotly-example.ipynb)
 
 ## How it works
 
-Trainplot outputs the matplotlib figure to an `ipywidgets.Output` widget, so it doesn't interfere with other outputs like `tqdm` or print statements. To avoid wasting resources and flickering, the figure is only updated with a given `update_period`. This can also be done from a separate `threading.Thread`, to not block the main thread.
+Trainplot outputs the matplotlib figure to an `ipywidgets.Output` widget, so it doesn't interfere with other outputs like `tqdm` or print statements. To avoid wasting resources and flickering, the figure is only updated with a given `update_period`.
 A `post_run_cell` callback is added to the `IPython` instance, so that all updated TrainPlot figures include all new data when a cell execution is finished.
 When using `trainplot.plot`, a TrainPlot object is created for the current cell and cell-execution-count.

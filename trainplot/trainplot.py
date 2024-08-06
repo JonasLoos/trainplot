@@ -5,18 +5,15 @@ from ipywidgets import Output, Layout
 from IPython.display import display
 from IPython import get_ipython
 import time
-import threading
 from collections import defaultdict
 
 
 
 class TrainPlotBase():
-    def __init__(self, update_period: float = 0.5, threaded: bool = False):
+    def __init__(self, update_period: float = 0.5):
         '''
         Args:
             update_period: minimum time in seconds between plot updates.
-            threaded: if `True`, plot in a separate thread (cann mess up output). If `False`, plot in the main thread (slower).
-                If you experience problems with other output vanishing or ending up in the plot, try setting this to `False`.
         '''
         # check arguments
         if update_period < 0:
@@ -24,12 +21,8 @@ class TrainPlotBase():
 
         # setup properties
         self.update_period = update_period
-        self.new_data = False  # signals to the plotting thread that new data is available
         self.data = dict()
         self.update_step = 0
-        self.threaded = threaded
-        self.plot_thread = None  # thread that periodically updates the plot
-        self.stop_thread = False  # signals to the plotting thread that it should stop
         self.last_update = 0  # time.time() of last plot update
 
         self.init_plot()
@@ -42,20 +35,6 @@ class TrainPlotBase():
     def update_plot(self):
         '''Update the plot with the current data.'''
         raise NotImplementedError('update_plot must be implemented by subclass')
-
-    def _update_plot_periodically(self):
-        '''Update the plot periodically. This function is made to be called in a separate thread.'''
-        # plot as long as new data is coming in faster than the update period
-        while self.new_data:
-            self.new_data = False  # possible race condition (could cause plotting of even newer data than expected - not a problem)
-            self.last_update = time.time()
-            # plot all data
-            self.update_plot()
-            # wait for next update, while checking if the thread should stop
-            while time.time() - self.last_update < self.update_period:
-                if self.stop_thread:
-                    return  # exit thread
-                time.sleep(0.05)
 
     def update(self, **args):
         '''Update the data, which will be plotted as soon as `update_period` has passed since the last plot.
@@ -88,18 +67,10 @@ class TrainPlotBase():
                 self.data[key].append((update_step, value))
         self.update_step += 1
 
-        # plotting
-        if self.threaded:
-            self.new_data = True
-            # start plotting thread if not already running
-            if self.plot_thread is None or not self.plot_thread.is_alive():
-                self.plot_thread = threading.Thread(target=self._update_plot_periodically)  # possible race condition (could spawn multiple threads)
-                self.plot_thread.start()
-        else:
-            # plot in main thread if enough time has passed since the last plot
-            if time.time() - self.last_update > self.update_period:
-                self.last_update = time.time()
-                self.update_plot()
+        # plot if enough time has passed since the last plot
+        if time.time() - self.last_update > self.update_period:
+            self.last_update = time.time()
+            self.update_plot()
 
         # mark this TrainPlot object as active
         global currently_active_trainplot_objects
@@ -111,11 +82,6 @@ class TrainPlotBase():
 
     def close(self):
         '''Do a final plot update.'''
-        if self.threaded:
-            # prevent waiting, by setting stop_thread to True, which causes the thread to exit immediately
-            self.stop_thread = True
-            if self.plot_thread is not None:
-                self.plot_thread.join()
         # final update
         self.update_plot()
 
@@ -150,13 +116,11 @@ class TrainPlotOutputWidget(TrainPlotBase):
 
 
 class TrainPlotMpl(TrainPlotOutputWidget):
-    def __init__(self, update_period: float = 0.5, threaded: bool = False, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str,dict[str,Any]] = {}, axis_custumization: dict[tuple[int,int,int], Callable[[plt.Axes], None]] = {}):
+    def __init__(self, update_period: float = 0.5, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str,dict[str,Any]] = {}, axis_custumization: dict[tuple[int,int,int], Callable[[plt.Axes], None]] = {}):
         '''
         Args:
             update_period: minimum time in seconds between updates. 
                 Setting this to a low value (< 0.5) can significantly slow down training.
-            threaded: if `True`, plot in a separate thread (faster). If `False`, plot in the main thread (slower).
-                If you experience problems with other output vanishing or ending up in the plot, try setting this to `False`.
             fig_args: arguments passed to `plt.subplots`.
             plot_pos: dictionary mapping data keys to plot positions.
                 plot_pos[key] = (row, column, twinx)
@@ -249,7 +213,6 @@ class TrainPlotMpl(TrainPlotOutputWidget):
         
         super().__init__(
             update_period=update_period,
-            threaded=threaded,
             plot_init_fn=default_plot_init_fn,
             plot_update_fn=default_plot_update_fn
         )
@@ -258,13 +221,11 @@ class TrainPlotMpl(TrainPlotOutputWidget):
 
 class TrainPlotPlotly(TrainPlotBase):
     '''Plot using plotly.'''
-    def __init__(self, update_period: float = 0.5, threaded: bool = False, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str, dict[str,Any]] = {}):
+    def __init__(self, update_period: float = 0.5, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str, dict[str,Any]] = {}):
         '''
         Args:
             update_period: minimum time in seconds between updates. 
                 Setting this to a low value (< 0.5) can significantly slow down training.
-            threaded: if `True`, plot in a separate thread (faster). If `False`, plot in the main thread (slower).
-                If you experience problems with other output vanishing or ending up in the plot, try setting this to `False`.
             fig_args: arguments passed to `go.FigureWidget`. Default: `{'layout': {'height': 450}}`.
             plot_pos: dictionary mapping data keys to plot positions.
                 plot_pos[key] = (row, column, twinx)
@@ -289,7 +250,7 @@ class TrainPlotPlotly(TrainPlotBase):
         self.fig_args = fig_args
         self.plot_pos = plot_pos
         self.plot_args = plot_args
-        super().__init__(update_period=update_period, threaded=threaded)
+        super().__init__(update_period=update_period)
 
     def init_plot(self):
         import plotly.graph_objects as go
@@ -344,6 +305,7 @@ def plot(**args):
         plot(i=i)
     ```
     '''
+    # TODO: make this a class so that it can have a `use_mpl()` function
     # check if running in IPython and do nothing if not
     if ipython_instance is None:
         return
@@ -352,6 +314,9 @@ def plot(**args):
     global unnamed_trainplot_objects
     unnamed_trainplot_objects[ipython_instance.execution_count].update(**args)
 
+
+class CellPlotter:
+    
 
 
 def close_ipython_cell(*args, **kwargs):

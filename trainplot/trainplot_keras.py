@@ -20,7 +20,6 @@ class TrainPlotKerasCallback(keras.callbacks.Callback):
 
         # setup default properties
         trainplot_kwargs = {
-            'threaded': False,
             'plot_pos': {'loss': (0,0,0), 'val_loss': (0,0,0), 'accuracy': (0,0,1), 'val_accuracy': (0,0,1)},
             'plot_args': {
                 'loss': {'color': 'orange', 'alpha': 0.7, 'label': 'Loss'},
