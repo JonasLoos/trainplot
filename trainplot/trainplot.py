@@ -1,3 +1,4 @@
+import sys
 from typing import Any, Callable
 import matplotlib.pyplot as plt
 import numpy as np
@@ -73,8 +74,7 @@ class TrainPlotBase():
             self.update_plot()
 
         # mark this TrainPlot object as active
-        global currently_active_trainplot_objects
-        currently_active_trainplot_objects.add(self)
+        ENV.currently_active_trainplot_objects.add(self)
 
     def __call__(self, **args):
         '''Shutcut for `update` function.'''
@@ -97,7 +97,7 @@ class TrainPlotOutputWidget(TrainPlotBase):
     def init_plot(self):
         '''Create the plot.'''
         # setup output widget, if running in IPython
-        if ipython_instance is not None:
+        if ENV.ipython_instance is not None:
             self.figure_data, layout_args = self.plot_init_fn()
             self.out = Output(layout=Layout(**layout_args))
             display(self.out)
@@ -302,39 +302,38 @@ def plot(**args):
     Examples:
     ```python
     for i in range(5):
-        plot(i=i)
+        plot(value=i**2)
     ```
     '''
-    # TODO: make this a class so that it can have a `use_mpl()` function
     # check if running in IPython and do nothing if not
-    if ipython_instance is None:
+    if ENV.ipython_instance is None:
         return
 
     # update TrainPlot object for current cell
-    global unnamed_trainplot_objects
-    unnamed_trainplot_objects[ipython_instance.execution_count].update(**args)
+    ENV.unnamed_trainplot_objects[ENV.ipython_instance.execution_count].update(**args)
 
 
-class CellPlotter:
-    
+
+class TrainPlotEnvironmentManager:
+    '''Manage global variables and IPython hooks'''
+    def __init__(self):
+        # setup ipython hooks
+        self.ipython_instance = get_ipython()
+        if self.ipython_instance is not None:
+            self.ipython_instance.events.register('post_run_cell', self.close_ipython_cell)
+        else:
+            print('WARNING: It seems you are running trainplot outside of an IPython environment. No plots will be displayed.', sys.stderr)
+
+        # global variables
+        self.default_trainplot_class = TrainPlotPlotly  # can be changed to adjust the default trainplot type for `plot`
+        self.currently_active_trainplot_objects: set[TrainPlotBase] = set()
+        self.unnamed_trainplot_objects = defaultdict(lambda: self.default_trainplot_class())
+
+    def close_ipython_cell(self, *args, **kwargs):
+        '''This closes all TrainPlot objects that were updated in the current cell. This makes sure all data is plotted before the cell is finished.'''
+        for tp in self.currently_active_trainplot_objects:
+            tp.close()
+        self.currently_active_trainplot_objects.clear()
 
 
-def close_ipython_cell(*args, **kwargs):
-    '''This closes all TrainPlot objects that were updated in the current cell. This makes sure all data is plotted before the cell is finished.'''
-    global currently_active_trainplot_objects
-    for tp in currently_active_trainplot_objects:
-        tp.close()
-    currently_active_trainplot_objects.clear()
-
-
-# setup ipython hooks
-ipython_instance = get_ipython()
-if ipython_instance is not None:
-    ipython_instance.events.register('post_run_cell', close_ipython_cell)
-else:
-    print('WARNING: It seems you are running trainplot outside of an IPython environment. No plots will be displayed.')
-
-
-# global variables
-currently_active_trainplot_objects: set[TrainPlotBase] = set()
-unnamed_trainplot_objects = defaultdict(TrainPlotPlotly)
+ENV = TrainPlotEnvironmentManager()
