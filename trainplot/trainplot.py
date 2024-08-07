@@ -310,7 +310,8 @@ def plot(**args):
         return
 
     # update TrainPlot object for current cell
-    ENV.unnamed_trainplot_objects[ENV.ipython_instance.execution_count].update(**args)
+    key = (ENV.ipython_instance.execution_count, *args.keys())
+    ENV.unnamed_trainplot_objects[key].update(**args)
 
 
 
