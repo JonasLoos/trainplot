@@ -7,6 +7,22 @@ from IPython.display import display
 from IPython import get_ipython
 import time
 from collections import defaultdict
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+
+
+class TPOutput(Output):
+    def __repr__(self):
+        # TODO: during normal operation return the default (super) __repr__, but during notebook load, display helpful message
+        return 'Here was a Trainplot output. It is not preserved across notebook reloads.'
+
+
+
+class TPFigureWidget(go.FigureWidget):
+    def __repr__(self):
+        # TODO: during normal operation return the default (super) __repr__, but during notebook load, display helpful message
+        return 'Here was a Trainplot output. It is not preserved across notebook reloads.'
 
 
 
@@ -99,7 +115,7 @@ class TrainPlotOutputWidget(TrainPlotBase):
         # setup output widget, if running in IPython
         if ENV.ipython_instance is not None:
             self.figure_data, layout_args = self.plot_init_fn()
-            self.out = Output(layout=Layout(**layout_args))
+            self.out = TPOutput(layout=Layout(**layout_args))
             display(self.out)
         else:
             self.figure_data = None
@@ -253,11 +269,9 @@ class TrainPlotPlotly(TrainPlotBase):
         super().__init__(update_period=update_period)
 
     def init_plot(self):
-        import plotly.graph_objects as go
-        from plotly.subplots import make_subplots
         rows = max([0] + [x[0] for x in self.plot_pos.values()]) + 1
         cols = max([0] + [x[1] for x in self.plot_pos.values()]) + 1
-        self.fig = go.FigureWidget(make_subplots(
+        self.fig = TPFigureWidget(make_subplots(
             rows=rows,
             cols=cols,
             specs = [[{"secondary_y": True}]*cols]*rows,
@@ -266,7 +280,6 @@ class TrainPlotPlotly(TrainPlotBase):
         display(self.fig)
     
     def update_plot(self):
-        import plotly.graph_objects as go
         traces = {trace.name: trace for trace in self.fig.data}
         for key, value in self.data.items():
             name = self.plot_args.get(key, {}).get('name', key)
@@ -289,12 +302,29 @@ class TrainPlotPlotly(TrainPlotBase):
                 )
 
 
+class TrainPlotBarPlotly(TrainPlotBase):
+    '''Plot a single bar plot showing the last datapoint using Plotly'''
+    def __init__(self, update_period: float = 0.5, fig_args: dict[str, Any] = {}):
+        self.fig_args = fig_args
+        super().__init__(update_period=update_period)
 
-def plot(**args):
-    '''Create or update an unnamed TrainPlot object for the current cell.
+    def init_plot(self):
+        self.fig = TPFigureWidget(make_subplots(figure=go.Figure(**self.fig_args)))
+        self.fig.add_trace(dict(x = [], y = [], type='bar'))
+        display(self.fig)
+
+    def update_plot(self):
+        bar_trace = self.fig.data[0]
+        last_data = {key: value[-1][1] for key, value in self.data.items()}
+        bar_trace.y = zip(last_data.values()) if last_data else []
+
+
+
+class Plot:
+    '''Create or update a plot for the current cell.
 
     Compared to a TrainPlot object, this function doesn't need initialization.
-    However, therefore, no customizations are possible.
+    However, therefore, customization is limited.
 
     Args:
         NAME=NEW_VALUE, ...: Where NAME is the name of the data to update and NEW_VALUE is the new value to append to the data list.
@@ -305,14 +335,80 @@ def plot(**args):
         plot(value=i**2)
     ```
     '''
-    # check if running in IPython and do nothing if not
-    if ENV.ipython_instance is None:
-        return
+    def __init__(self):
+        # line plot
+        self.line_plot_cls = TrainPlotPlotly  # can be changed to adjust the default trainplot type for `plot`
+        self.line_plots = defaultdict(lambda: self.line_plot_cls())
 
-    # update TrainPlot object for current cell
-    key = (ENV.ipython_instance.execution_count, *args.keys())
-    ENV.unnamed_trainplot_objects[key].update(**args)
+        # bar plot
+        self.bar_plot_cls = lambda: TrainPlotBarPlotly()
+        self.bar_plots = defaultdict(lambda: self.bar_plot_cls())
 
+    def __len__(self):
+        return len(self.line_plots) + len(self.bar_plots)
+
+    def __call__(self, **args):
+        '''Create or update a plot for the current cell.
+
+        Compared to a TrainPlot object, this function doesn't need initialization.
+        However, therefore, customization is limited.
+
+        Args:
+            NAME=NEW_VALUE, ...: Where NAME is the name of the data to update and NEW_VALUE is the new value to append to the data list.
+
+        Examples:
+        ```python
+        for i in range(5):
+            plot(value=i**2)
+        ```
+        '''
+        self.line(**args)
+
+    def line(self, **args):
+        '''Create or update a line plot for the current cell.
+
+        Compared to a TrainPlot object, this function doesn't need initialization.
+        However, therefore, customization is limited.
+
+        Args:
+            NAME=NEW_VALUE, ...: Where NAME is the name of the data to update and NEW_VALUE is the new value to append to the data list.
+
+        Examples:
+        ```python
+        for i in range(5):
+            plot(value=i**2)
+        ```
+        '''
+        # check if running in IPython and do nothing if not
+        if ENV.ipython_instance is None:
+            return
+
+        # update TrainPlot object for current cell. Will be initialized automatically if not yet created.
+        key = (ENV.ipython_instance.execution_count, *args.keys())
+        self.line_plots[key].update(**args)
+
+    def bar(self, **args):
+        '''Create or update a line plot for the current cell.
+
+        Compared to a TrainPlot object, this function doesn't need initialization.
+        However, therefore, customization is limited.
+
+        Args:
+            NAME=NEW_VALUE, ...: Where NAME is the name of the data to update and NEW_VALUE is the new value to append to the data list.
+
+        Examples:
+        ```python
+        for i in range(5):
+            plot(value=i**2)
+        ```
+        '''
+        # check if running in IPython and do nothing if not
+        if ENV.ipython_instance is None:
+            return
+
+        # update TrainPlot object for current cell. Will be initialized automatically if not yet created.
+        key = (ENV.ipython_instance.execution_count, *args.keys())
+        self.bar_plots[key].update(**args)
 
 
 class TrainPlotEnvironmentManager:
@@ -326,9 +422,7 @@ class TrainPlotEnvironmentManager:
             print('WARNING: It seems you are running trainplot outside of an IPython environment. No plots will be displayed.', sys.stderr)
 
         # global variables
-        self.default_trainplot_class = TrainPlotPlotly  # can be changed to adjust the default trainplot type for `plot`
         self.currently_active_trainplot_objects: set[TrainPlotBase] = set()
-        self.unnamed_trainplot_objects = defaultdict(lambda: self.default_trainplot_class())
 
     def close_ipython_cell(self, *args, **kwargs):
         '''This closes all TrainPlot objects that were updated in the current cell. This makes sure all data is plotted before the cell is finished.'''
@@ -338,3 +432,4 @@ class TrainPlotEnvironmentManager:
 
 
 ENV = TrainPlotEnvironmentManager()
+plot = Plot()
