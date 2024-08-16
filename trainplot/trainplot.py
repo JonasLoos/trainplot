@@ -316,7 +316,8 @@ class TrainPlotBarPlotly(TrainPlotBase):
     def update_plot(self):
         bar_trace = self.fig.data[0]
         last_data = {key: value[-1][1] for key, value in self.data.items()}
-        bar_trace.y = zip(last_data.values()) if last_data else []
+        bar_trace.x = list(last_data.keys())
+        bar_trace.y = list(last_data.values()) if last_data else []
 
 
 
@@ -429,6 +430,8 @@ class TrainPlotEnvironmentManager:
         for tp in self.currently_active_trainplot_objects:
             tp.close()
         self.currently_active_trainplot_objects.clear()
+        # TODO: try to replace the FigureWidget with a static widget, that is preserved across notebook reloads.
+        # Maybe it should be hidden in the same session to preserve execution order, but shown after notebook reload.
 
 
 ENV = TrainPlotEnvironmentManager()
