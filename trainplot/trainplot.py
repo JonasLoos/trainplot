@@ -420,7 +420,7 @@ class TrainPlotEnvironmentManager:
         if self.ipython_instance is not None:
             self.ipython_instance.events.register('post_run_cell', self.close_ipython_cell)
         else:
-            print('WARNING: It seems you are running trainplot outside of an IPython environment. No plots will be displayed.', sys.stderr)
+            print('WARNING: It seems you are running trainplot outside of an IPython environment. No plots will be displayed.', file=sys.stderr)
 
         # global variables
         self.currently_active_trainplot_objects: set[TrainPlotBase] = set()
@@ -430,7 +430,7 @@ class TrainPlotEnvironmentManager:
         for tp in self.currently_active_trainplot_objects:
             tp.close()
         self.currently_active_trainplot_objects.clear()
-        # TODO: try to replace the FigureWidget with a static widget, that is preserved across notebook reloads.
+        # TODO: maybe try to replace the FigureWidget with a static widget, that is preserved across notebook reloads.
         # Maybe it should be hidden in the same session to preserve execution order, but shown after notebook reload.
 
 
