@@ -1,6 +1,7 @@
 import sys
 from typing import Any, Callable
 import matplotlib.pyplot as plt
+import bqplot as bq
 import numpy as np
 from ipywidgets import Output, Layout
 from IPython.display import display
@@ -195,7 +196,7 @@ class TrainPlotMpl(TrainPlotOutputWidget):
             layout_args = dict(height=fig_height, overflow='hidden')
             return (fig, axs), layout_args
 
-        def default_plot_update_fn(figure_data, data: np.ndarray):
+        def default_plot_update_fn(figure_data, data):
             fig, axs = figure_data
             # clear axes
             for ax in axs.flatten():
@@ -232,6 +233,34 @@ class TrainPlotMpl(TrainPlotOutputWidget):
             plot_init_fn=default_plot_init_fn,
             plot_update_fn=default_plot_update_fn
         )
+
+
+
+class TrainPlotBq(TrainPlotBase):
+    max_lines = 10
+    line_colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
+
+    def init_plot(self):
+
+        # 1. Create the scales
+        xs = bq.LinearScale()
+        ys = bq.LinearScale()
+
+        # 2. Create the axes for x and y
+        xax = bq.Axis(scale=xs, label="X")
+        yax = bq.Axis(scale=ys, orientation="vertical", label="Y")
+
+        panzoom = bq.PanZoom(scales={"x": [xs], "y": [ys]})
+        self.fig = bq.Figure(marks=[bq.Lines(scales={"x": xs, "y": ys}, stroke=self.line_colors[i]) for i in range(self.max_lines)], axes=[xax, yax], interaction=panzoom)
+        display(self.fig)
+
+    def update_plot(self):
+        for i, (name, values) in enumerate(self.data.items()):
+            if i >= len(self.fig.marks):
+                self.fig.marks.append(bq.Lines(y=values))
+            self.fig.marks[i].x, self.fig.marks[i].y = zip(*values)
+
+        return self.fig
 
 
 
