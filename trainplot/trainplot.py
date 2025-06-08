@@ -1,61 +1,222 @@
-import sys
-from typing import Any, Callable
-import matplotlib.pyplot as plt
-import bqplot as bq
-import numpy as np
-from ipywidgets import Output, Layout
-from IPython.display import display
-from IPython import get_ipython
+"""
+Minimal train-plot library for Jupyter notebooks.
+A simple plotting library for monitoring training progress.
+"""
+
 import time
+import uuid
+import json
+from typing import Dict, List, Tuple, Any
 from collections import defaultdict
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+from IPython.display import display, Javascript
+from IPython import get_ipython
 
 
+class TrainPlotFigure:
+    """A custom figure class for training plots that renders using HTML5 Canvas."""
 
-class TPOutput(Output):
-    def __repr__(self):
-        # TODO: during normal operation return the default (super) __repr__, but during notebook load, display helpful message
-        return 'Here was a Trainplot output. It is not preserved across notebook reloads.'
+    def __init__(self, width: int = 600, height: int = 400):
+        """Create a figure for training plots."""
+        self.width = width
+        self.height = height
+        self.data: Dict[str, List[Tuple[float, float]]] = {}
+
+        # Generate unique identifiers for this figure
+        js_id = uuid.uuid4().hex[:8]
+        self._js_figure_id = f"trainplot_figure_{js_id}"
+        self._js_func_name = f"renderTrainPlot_{js_id}"
+
+    def update_data(self, data: Dict[str, List[Tuple[float, float]]]):
+        """Update the figure with new data."""
+        self.data = data.copy()
+
+    def update_display(self):
+        """Update the display in Jupyter notebook."""
+        update_js = f"""
+        (function() {{
+            const data = {json.dumps(self.data)};
+            const el = document.getElementById('{self._js_figure_id}');
+            if (!el) return;
+            const canvas = el.querySelector('canvas');
+            if (!canvas) return;
+            window.{self._js_func_name}(canvas, data);
+        }})();
+        """
+        display(Javascript(update_js))
+
+    def _get_render_js(self):
+        """Get the complete JavaScript code for rendering."""
+        return f"""
+        function {self._js_func_name}(canvas, data) {{
+            const ctx = canvas.getContext("2d");
+            const w = canvas.width = {self.width};
+            const h = canvas.height = {self.height};
+            const padding = 60;
+            const plotWidth = w - 2 * padding;
+            const plotHeight = h - 2 * padding;
+
+            // Clear canvas
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = "#e0e0e0";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(padding, padding, plotWidth, plotHeight);
+
+            // Exit early if no data
+            if (!data || Object.keys(data).length === 0) {{
+                ctx.fillStyle = "#666";
+                ctx.font = "14px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("No data", w/2, h/2);
+                return;
+            }}
+
+            // Calculate global bounds
+            let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+            Object.values(data).forEach(series => {{
+                series.forEach(([x, y]) => {{
+                    xmin = Math.min(xmin, x);
+                    xmax = Math.max(xmax, x);
+                    ymin = Math.min(ymin, y);
+                    ymax = Math.max(ymax, y);
+                }});
+            }});
+
+            // Add padding to ranges
+            const xrange = xmax - xmin || 1;
+            const yrange = ymax - ymin || 1;
+            xmin -= xrange * 0.05;
+            xmax += xrange * 0.05;
+            ymin -= yrange * 0.05;
+            ymax += yrange * 0.05;
+
+            // Helper function to convert data coordinates to pixel coordinates
+            const toPixel = (x, y) => [
+                padding + (x - xmin) / (xmax - xmin) * plotWidth,
+                padding + plotHeight - (y - ymin) / (ymax - ymin) * plotHeight
+            ];
+
+            // Color palette
+            const colors = [
+                "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+                "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+            ];
+
+            // Draw grid
+            ctx.strokeStyle = "#f0f0f0";
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 5; i++) {{
+                const x = padding + (i / 5) * plotWidth;
+                const y = padding + (i / 5) * plotHeight;
+                ctx.beginPath();
+                ctx.moveTo(x, padding);
+                ctx.lineTo(x, padding + plotHeight);
+                ctx.moveTo(padding, y);
+                ctx.lineTo(padding + plotWidth, y);
+                ctx.stroke();
+            }}
+
+            // Draw data series
+            Object.entries(data).forEach(([name, series], index) => {{
+                if (series.length === 0) return;
+                const color = colors[index % colors.length];
+                ctx.strokeStyle = color;
+                ctx.fillStyle = color;
+                ctx.lineWidth = 2;
+
+                // Draw line
+                ctx.beginPath();
+                series.forEach(([x, y], i) => {{
+                    const [px, py] = toPixel(x, y);
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }});
+                ctx.stroke();
+
+                // Draw points
+                series.forEach(([x, y]) => {{
+                    const [px, py] = toPixel(x, y);
+                    ctx.beginPath();
+                    ctx.arc(px, py, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                }});
+            }});
+
+            // Draw axes labels
+            ctx.fillStyle = "#333";
+            ctx.font = "12px Arial";
+            ctx.textAlign = "center";
+            for (let i = 0; i <= 5; i++) {{
+                const x = padding + (i / 5) * plotWidth;
+                const value = xmin + (i / 5) * (xmax - xmin);
+                ctx.fillText(value.toFixed(1), x, h - 10);
+            }}
+            ctx.textAlign = "right";
+            for (let i = 0; i <= 5; i++) {{
+                const y = padding + plotHeight - (i / 5) * plotHeight;
+                const value = ymin + (i / 5) * (ymax - ymin);
+                ctx.fillText(value.toFixed(2), padding - 10, y + 4);
+            }}
+
+            // Draw legend
+            ctx.textAlign = "left";
+            ctx.font = "12px Arial";
+            let legendY = padding + 20;
+            Object.entries(data).forEach(([name, _], index) => {{
+                const color = colors[index % colors.length];
+                ctx.fillStyle = color;
+                ctx.fillRect(w - 150, legendY - 8, 12, 12);
+                ctx.fillStyle = "#333";
+                ctx.fillText(name, w - 130, legendY);
+                legendY += 20;
+            }});
+        }}
+        window.{self._js_func_name} = {self._js_func_name};
+        """
+
+    def _repr_mimebundle_(self, include=None, exclude=None):
+        """Return MIME bundle for Jupyter display protocol."""
+        html_content = f"""
+        <div id="{self._js_figure_id}" style="width: {self.width}px; height: {self.height}px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;"></div>
+        <script>
+        {self._get_render_js()}
+        (function() {{
+            const data = {json.dumps(self.data)};
+            const el = document.getElementById('{self._js_figure_id}');
+            if (!el) return;
+            const canvas = document.createElement("canvas");
+            canvas.style.display = "block";
+            el.appendChild(canvas);
+            {self._js_func_name}(canvas, data);
+        }})();
+        </script>
+        """
+        data_summary = f"{len(self.data)} series" if self.data else "no data"
+        return {
+            "text/html": html_content,
+            "text/plain": f"<TrainPlotFigure with {data_summary}>"
+        }
 
 
+class TrainPlot:
+    """Main TrainPlot class for monitoring training progress."""
 
-class TPFigureWidget(go.FigureWidget):
-    def __repr__(self):
-        # TODO: during normal operation return the default (super) __repr__, but during notebook load, display helpful message
-        return 'Here was a Trainplot output. It is not preserved across notebook reloads.'
-
-
-
-class TrainPlotBase():
-    def __init__(self, update_period: float = 0.5):
-        '''
-        Args:
-            update_period: minimum time in seconds between plot updates.
-        '''
-        # check arguments
+    def __init__(self, update_period: float = 0.1, width: int = 600, height: int = 400):
+        """Create a TrainPlot instance."""
         if update_period < 0:
             raise ValueError(f'update_period must be positive, got {update_period}')
 
-        # setup properties
         self.update_period = update_period
-        self.data = dict()
+        self.data: Dict[str, List[Tuple[float, float]]] = {}
         self.update_step = 0
-        self.last_update = 0  # time.time() of last plot update
+        self.last_update = 0
+        self.figure = TrainPlotFigure(width, height)
 
-        self.init_plot()
-        self.update_plot()
+        if ENV.ipython_instance is not None:
+            display(self.figure)
 
-    def init_plot(self):
-        '''Create the plot.'''
-        raise NotImplementedError('init_plot must be implemented by subclass')
-
-    def update_plot(self):
-        '''Update the plot with the current data.'''
-        raise NotImplementedError('update_plot must be implemented by subclass')
-
-    def update(self, **args):
-        '''Update the data, which will be plotted as soon as `update_period` has passed since the last plot.
+    def update(self, **kwargs):
+        """Update the data, which will be plotted as soon as `update_period` has passed since the last plot.
 
         You can also call the TrainPlot object directly, which is equivalent to calling this function.
 
@@ -68,400 +229,81 @@ class TrainPlotBase():
             trainplot.update(loss=0.1, accuracy=0.9)
             # or
             trainplot(step=10, loss=0.05, accuracy=0.95)
-        '''
+        """
         update_step = self.update_step
-        for key, value in args.items():
+        for key, value in kwargs.items():
             if key == 'step':
-                # use given step instead of internal step counter
                 update_step = value
             elif key == 'epoch':
-                # TODO: implement epochs
                 raise NotImplementedError('Epochs not supported yet')
             elif key not in self.data:
-                # create new data list
                 self.data[key] = [(update_step, value)]
             else:
-                # append to existing data list
                 self.data[key].append((update_step, value))
         self.update_step += 1
 
-        # plot if enough time has passed since the last plot
         if time.time() - self.last_update > self.update_period:
             self.last_update = time.time()
             self.update_plot()
 
-        # mark this TrainPlot object as active
         ENV.currently_active_trainplot_objects.add(self)
 
-    def __call__(self, **args):
-        '''Shutcut for `update` function.'''
-        self.update(**args)
+    def update_plot(self):
+        """Update the plot with the current data."""
+        if ENV.ipython_instance is not None:
+            self.figure.update_data(self.data)
+            self.figure.update_display()
+
+    def __call__(self, **kwargs):
+        """Shortcut for update function."""
+        self.update(**kwargs)
 
     def close(self):
-        '''Do a final plot update.'''
-        # final update
+        """Do a final plot update."""
         self.update_plot()
 
 
-
-class TrainPlotOutputWidget(TrainPlotBase):
-    '''A wrapper around TrainPlotBase that displays the plot in an output widget.'''
-    def __init__(self, *args, plot_init_fn: Callable[[], tuple[Any, dict]], plot_update_fn: Callable[[Any, np.ndarray], Any], **kwargs):
-        self.plot_init_fn = plot_init_fn
-        self.plot_update_fn = plot_update_fn
-        super().__init__(*args, **kwargs)
-    
-    def init_plot(self):
-        '''Create the plot.'''
-        # setup output widget, if running in IPython
-        if ENV.ipython_instance is not None:
-            self.figure_data, layout_args = self.plot_init_fn()
-            self.out = TPOutput(layout=Layout(**layout_args))
-            display(self.out)
-        else:
-            self.figure_data = None
-            self.out = None
-
-    def update_plot(self):
-        '''Update the plot with the current data.'''
-        if self.out is None:
-            return
-        self.out.clear_output(wait=True)
-        self.out.append_display_data(self.plot_update_fn(self.figure_data, self.data))
-        self.out.outputs = self.out.outputs[-1:]
-
-
-
-class TrainPlotMpl(TrainPlotOutputWidget):
-    def __init__(self, update_period: float = 0.5, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str,dict[str,Any]] = {}, axis_custumization: dict[tuple[int,int,int], Callable[[plt.Axes], None]] = {}):
-        '''
-        Args:
-            update_period: minimum time in seconds between updates. 
-                Setting this to a low value (< 0.5) can significantly slow down training.
-            fig_args: arguments passed to `plt.subplots`.
-            plot_pos: dictionary mapping data keys to plot positions.
-                plot_pos[key] = (row, column, twinx)
-                    row: row index of plot
-                    column: column index of plot
-                    twinx: if 1, plot on secondary y-axis
-            plot_args: arguments passed to `plt.plot`.
-            axis_custumization: dictionary mapping plot positions to functions that customize the axis.
-
-        Examples:
-        ```
-        # default
-        trainplot = TrainPlot()
-        # custom with twinx
-        trainplot = TrainPlot(
-            update_period=2,
-            fig_args={'figsize': (10, 8)},
-            plot_pos={'loss': (0, 0, 0), 'accuracy': (0, 0, 1)},
-            plot_args={'loss': {'color': 'red'}, 'accuracy': {'color': 'blue'}}
-        )
-        # custom with 4 axes
-        trainplot = TrainPlot(
-            fig_args=dict(
-                nrows=2,
-                ncols=2,
-                figsize=(10, 10),
-                gridspec_kw={'height_ratios': [1, 2], 'width_ratios': [1, 1]}
-            ),
-            plot_pos={
-                'loss': (0, 0, 0), 'accuracy': (0, 1, 0),
-                'val_loss': (1, 0, 0), 'val_accuracy': (1, 1, 0)
-            }
-        )
-        ```
-        '''
-        for key, value in plot_pos.items():
-            if len(value) != 3:
-                raise ValueError(f'plot_pos["{key}"] must be a tuple of length 3, got {value}')
-            if value[2] not in (0, 1):
-                raise ValueError(f'plot_pos[{key}][2] must be 0 or 1, got {value[2]}')
-
-        def default_plot_init_fn():
-            fig, axs_list = plt.subplots(squeeze=False, **fig_args)
-            axs = np.full((*np.shape(axs_list), 2), None, dtype=object)
-            axs[:, :, 0] = axs_list
-            # create twinx where necessary
-            for pos in plot_pos.values():
-                if pos[2] == 1 and axs[pos] is None and axs[pos[0], pos[1], 0] is not None:
-                    axs[pos] = axs[pos[0], pos[1], 0].twinx()
-            # custom axis custumization
-            for pos, func in axis_custumization.items():
-                func(axs[pos])
-            fig.tight_layout()
-            plt.close(fig)  # close figure, to prevent jupyter from displaying it a second time
-            fig_height = f'{fig.get_size_inches()[1]*1.04-0.04}in'  # fix/limit size of output widget, to prevent flickering
-            layout_args = dict(height=fig_height, overflow='hidden')
-            return (fig, axs), layout_args
-
-        def default_plot_update_fn(figure_data, data):
-            fig, axs = figure_data
-            # clear axes
-            for ax in axs.flatten():
-                if ax is not None:
-                    # clear lines, so they can be redrawn
-                    for line in ax.get_lines():
-                        line.remove()
-                    # reset color cycle, so that the colors don't change
-                    ax.set_prop_cycle(None)
-            # plot data
-            for key, value in data.items():
-                ax = axs[plot_pos.get(key, (0, 0, 0))]
-                args = {'label': key} | plot_args.get(key, {})
-                ax.plot(*zip(*value), **args)
-            # update legend
-            for axs_row in axs:
-                for ax in axs_row:
-                    ax1, ax2 = ax
-                    lines = []
-                    if ax1 is not None:
-                        lines += ax1.get_lines()
-                    if ax2 is not None:
-                        lines += ax2.get_lines()
-                    if len(lines) > 0:
-                        if ax1 is not None:
-                            ax1.legend(handles=lines)
-                        else:
-                            ax2.legend(handles=lines)
-            # return figure to be displayed
-            return fig
-        
-        super().__init__(
-            update_period=update_period,
-            plot_init_fn=default_plot_init_fn,
-            plot_update_fn=default_plot_update_fn
-        )
-
-
-
-class TrainPlotBq(TrainPlotBase):
-    max_lines = 10
-    line_colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
-
-    def init_plot(self):
-
-        # 1. Create the scales
-        xs = bq.LinearScale()
-        ys = bq.LinearScale()
-
-        # 2. Create the axes for x and y
-        xax = bq.Axis(scale=xs, label="X")
-        yax = bq.Axis(scale=ys, orientation="vertical", label="Y")
-
-        panzoom = bq.PanZoom(scales={"x": [xs], "y": [ys]})
-        self.fig = bq.Figure(marks=[bq.Lines(scales={"x": xs, "y": ys}, stroke=self.line_colors[i]) for i in range(self.max_lines)], axes=[xax, yax], interaction=panzoom)
-        display(self.fig)
-
-    def update_plot(self):
-        for i, (name, values) in enumerate(self.data.items()):
-            if i >= len(self.fig.marks):
-                self.fig.marks.append(bq.Lines(y=values))
-            self.fig.marks[i].x, self.fig.marks[i].y = zip(*values)
-
-        return self.fig
-
-
-
-class TrainPlotPlotly(TrainPlotBase):
-    '''Plot using plotly.'''
-    def __init__(self, update_period: float = 0.5, fig_args: dict[str, Any] = {}, plot_pos: dict[str, tuple[int,int,int]] = {}, plot_args: dict[str, dict[str,Any]] = {}):
-        '''
-        Args:
-            update_period: minimum time in seconds between updates. 
-                Setting this to a low value (< 0.5) can significantly slow down training.
-            fig_args: arguments passed to `go.FigureWidget`. Default: `{'layout': {'height': 450}}`.
-            plot_pos: dictionary mapping data keys to plot positions.
-                plot_pos[key] = (row, column, twinx)
-                    row: row index of plot
-                    column: column index of plot
-                    secondary y-axis: if 1, plot on secondary y-axis
-            plot_args: arguments passed to `fig.add_trace` (by default `go.Scatter`).
-
-        Examples:
-        ```
-        tp = TrainPlotPlotly(
-            update_period=0.2,
-            fig_args={'layout': {'title': 'My Train Plot', 'height': 600}},
-            plot_pos={'acc': (0, 0, 0), 'loss': (0, 0, 1), 'val_acc': (0, 0, 0), 'val_loss': (0, 0, 1), 'stuff': (1, 0, 0)},
-            plot_args={'acc': {'name': 'accuracy', 'line': {'color':'gold'}}, 'stuff': {'type': 'bar'}})
-        tp.fig.update_yaxes(row=2, col=1, type="log")  # log scale
-        ...
-        tp(acc=50, val_acc=40, loss=0.5, val_loss=0.5, stuff=42)
-        tp(acc=70, val_acc=50, loss=0.3, val_loss=0.35, stuff=420)
-        ```
-        '''
-        self.fig_args = fig_args
-        self.plot_pos = plot_pos
-        self.plot_args = plot_args
-        super().__init__(update_period=update_period)
-
-    def init_plot(self):
-        rows = max([0] + [x[0] for x in self.plot_pos.values()]) + 1
-        cols = max([0] + [x[1] for x in self.plot_pos.values()]) + 1
-        self.fig = TPFigureWidget(make_subplots(
-            rows=rows,
-            cols=cols,
-            specs = [[{"secondary_y": True}]*cols]*rows,
-            figure = go.Figure(**self.fig_args),
-        ))
-        display(self.fig)
-    
-    def update_plot(self):
-        traces = {trace.name: trace for trace in self.fig.data}
-        for key, value in self.data.items():
-            name = self.plot_args.get(key, {}).get('name', key)
-            if name in traces:
-                # update existing trace
-                traces[name].x = [x for x, _ in value]
-                traces[name].y = [y for _, y in value]
-            else:
-                # add new trace
-                row, col, secy = self.plot_pos.get(key, (0,0,0))
-                self.fig.add_trace(
-                    dict(
-                        x = [x for x, _ in value],
-                        y = [y for _, y in value],
-                        **({'name': key} | self.plot_args.get(key, {}))
-                    ),
-                    row=row+1,
-                    col=col+1,
-                    secondary_y=secy
-                )
-
-
-class TrainPlotBarPlotly(TrainPlotBase):
-    '''Plot a single bar plot showing the last datapoint using Plotly'''
-    def __init__(self, update_period: float = 0.5, fig_args: dict[str, Any] = {}):
-        self.fig_args = fig_args
-        super().__init__(update_period=update_period)
-
-    def init_plot(self):
-        self.fig = TPFigureWidget(make_subplots(figure=go.Figure(**self.fig_args)))
-        self.fig.add_trace(dict(x = [], y = [], type='bar'))
-        display(self.fig)
-
-    def update_plot(self):
-        bar_trace = self.fig.data[0]
-        last_data = {key: value[-1][1] for key, value in self.data.items()}
-        bar_trace.x = list(last_data.keys())
-        bar_trace.y = list(last_data.values()) if last_data else []
-
-
-
 class Plot:
-    '''Create or update a plot for the current cell.
+    """Create or update a plot for the current cell."""
 
-    Compared to a TrainPlot object, this function doesn't need initialization.
-    However, therefore, customization is limited.
-
-    Args:
-        NAME=NEW_VALUE, ...: Where NAME is the name of the data to update and NEW_VALUE is the new value to append to the data list.
-
-    Examples:
-    ```python
-    for i in range(5):
-        plot(value=i**2)
-    ```
-    '''
     def __init__(self):
-        # line plot
-        self.line_plot_cls = TrainPlotPlotly  # can be changed to adjust the default trainplot type for `plot`
-        self.line_plots = defaultdict(lambda: self.line_plot_cls())
-
-        # bar plot
-        self.bar_plot_cls = lambda: TrainPlotBarPlotly()
-        self.bar_plots = defaultdict(lambda: self.bar_plot_cls())
+        self.line_plots = defaultdict(lambda: TrainPlot())
 
     def __len__(self):
-        return len(self.line_plots) + len(self.bar_plots)
+        return len(self.line_plots)
 
-    def __call__(self, **args):
-        '''Create or update a plot for the current cell.
+    def __call__(self, **kwargs):
+        """Create or update a plot for the current cell."""
+        self.line(**kwargs)
 
-        Compared to a TrainPlot object, this function doesn't need initialization.
-        However, therefore, customization is limited.
-
-        Args:
-            NAME=NEW_VALUE, ...: Where NAME is the name of the data to update and NEW_VALUE is the new value to append to the data list.
-
-        Examples:
-        ```python
-        for i in range(5):
-            plot(value=i**2)
-        ```
-        '''
-        self.line(**args)
-
-    def line(self, **args):
-        '''Create or update a line plot for the current cell.
-
-        Compared to a TrainPlot object, this function doesn't need initialization.
-        However, therefore, customization is limited.
-
-        Args:
-            NAME=NEW_VALUE, ...: Where NAME is the name of the data to update and NEW_VALUE is the new value to append to the data list.
-
-        Examples:
-        ```python
-        for i in range(5):
-            plot(value=i**2)
-        ```
-        '''
-        # check if running in IPython and do nothing if not
+    def line(self, **kwargs):
+        """Create or update a line plot for the current cell."""
         if ENV.ipython_instance is None:
             return
 
-        # update TrainPlot object for current cell. Will be initialized automatically if not yet created.
-        key = (ENV.ipython_instance.execution_count, *args.keys())
-        self.line_plots[key].update(**args)
-
-    def bar(self, **args):
-        '''Create or update a line plot for the current cell.
-
-        Compared to a TrainPlot object, this function doesn't need initialization.
-        However, therefore, customization is limited.
-
-        Args:
-            NAME=NEW_VALUE, ...: Where NAME is the name of the data to update and NEW_VALUE is the new value to append to the data list.
-
-        Examples:
-        ```python
-        for i in range(5):
-            plot(value=i**2)
-        ```
-        '''
-        # check if running in IPython and do nothing if not
-        if ENV.ipython_instance is None:
-            return
-
-        # update TrainPlot object for current cell. Will be initialized automatically if not yet created.
-        key = (ENV.ipython_instance.execution_count, *args.keys())
-        self.bar_plots[key].update(**args)
+        key = (ENV.ipython_instance.execution_count, *kwargs.keys())
+        self.line_plots[key].update(**kwargs)
 
 
 class TrainPlotEnvironmentManager:
-    '''Manage global variables and IPython hooks'''
+    """Manage global variables and IPython hooks"""
+
     def __init__(self):
-        # setup ipython hooks
         self.ipython_instance = get_ipython()
         if self.ipython_instance is not None:
             self.ipython_instance.events.register('post_run_cell', self.close_ipython_cell)
         else:
-            print('WARNING: It seems you are running trainplot outside of an IPython environment. No plots will be displayed.', file=sys.stderr)
+            print('WARNING: It seems you are running trainplot outside of an IPython environment. No plots will be displayed.')
 
-        # global variables
-        self.currently_active_trainplot_objects: set[TrainPlotBase] = set()
+        self.currently_active_trainplot_objects: set[TrainPlot] = set()
 
     def close_ipython_cell(self, *args, **kwargs):
-        '''This closes all TrainPlot objects that were updated in the current cell. This makes sure all data is plotted before the cell is finished.'''
+        """Close all TrainPlot objects that were updated in the current cell."""
         for tp in self.currently_active_trainplot_objects:
             tp.close()
         self.currently_active_trainplot_objects.clear()
-        # TODO: maybe try to replace the FigureWidget with a static widget, that is preserved across notebook reloads.
-        # Maybe it should be hidden in the same session to preserve execution order, but shown after notebook reload.
 
 
+# Global instances
 ENV = TrainPlotEnvironmentManager()
 plot = Plot()

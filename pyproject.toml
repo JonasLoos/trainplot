@@ -8,13 +8,7 @@ readme = "README.md"
 license = {file = "LICENSE"}
 dynamic = ["version"]
 requires-python = ">=3.9"
-dependencies = [
-    "matplotlib",
-    "numpy",
-    "ipywidgets",
-    "ipython",
-    "plotly",
-]
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/JonasLoos/trainplot"
