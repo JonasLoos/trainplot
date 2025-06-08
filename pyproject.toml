@@ -8,7 +8,9 @@ readme = "README.md"
 license = {file = "LICENSE"}
 dynamic = ["version"]
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    ipython
+]
 
 [project.urls]
 Homepage = "https://github.com/JonasLoos/trainplot"

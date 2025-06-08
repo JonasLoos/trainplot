@@ -8,12 +8,12 @@ def TrainPlotKerasCallback(frequency: Literal["epoch", "batch"] = "epoch", **tra
     Args:
         frequency: How often to update the plot. Either "epoch" or "batch".
         **trainplot_kwargs: Passed to `TrainPlot` constructor.
-    
+
     Returns:
         A keras Callback instance.
     '''
     from keras.callbacks import Callback
-    
+
     class _TrainPlotKerasCallback(Callback):
         def __init__(self):
             super().__init__()
@@ -32,5 +32,5 @@ def TrainPlotKerasCallback(frequency: Literal["epoch", "batch"] = "epoch", **tra
 
         def on_train_end(self, logs=None):
             self.trainplot.close()
-    
+
     return _TrainPlotKerasCallback()

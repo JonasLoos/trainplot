@@ -12,6 +12,7 @@ from IPython.display import display, Javascript
 from IPython import get_ipython
 from .plotting_function import js_code
 
+
 class TrainPlotFigure:
     """A custom figure class for training plots that renders using HTML5 Canvas."""
 
