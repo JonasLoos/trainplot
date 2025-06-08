@@ -45,11 +45,50 @@ function FUNC_NAME(canvas, data) {
     ymin -= yrange * 0.05;
     ymax += yrange * 0.05;
 
+    // Helper function to find nice tick values
+    const getNiceTicks = (min, max, targetCount = 5) => {
+        const range = max - min;
+        if (range === 0) return [min];
+        
+        // Calculate rough step size
+        const roughStep = range / targetCount;
+        
+        // Find the magnitude (power of 10)
+        const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+        
+        // Find nice step size (1, 2, or 5 times the magnitude)
+        const normalized = roughStep / magnitude;
+        let niceStep;
+        if (normalized <= 1) niceStep = magnitude;
+        else if (normalized <= 2) niceStep = 2 * magnitude;
+        else if (normalized <= 5) niceStep = 5 * magnitude;
+        else niceStep = 10 * magnitude;
+        
+        // Find starting tick (first multiple of niceStep >= min)
+        const startTick = Math.ceil(min / niceStep) * niceStep;
+        
+        // Generate ticks
+        const ticks = [];
+        for (let tick = startTick; tick <= max; tick += niceStep) {
+            // Handle floating point precision issues
+            const roundedTick = Math.round(tick / niceStep) * niceStep;
+            if (roundedTick >= min && roundedTick <= max) {
+                ticks.push(roundedTick);
+            }
+        }
+        
+        return ticks.length > 0 ? ticks : [min, max];
+    };
+
     // Helper function to convert data coordinates to pixel coordinates
     const toPixel = (x, y) => [
         padding_left + (x - xmin) / (xmax - xmin) * plotWidth,
         padding_top + plotHeight - (y - ymin) / (ymax - ymin) * plotHeight
     ];
+
+    // Get nice tick values
+    const xTicks = getNiceTicks(xmin, xmax);
+    const yTicks = getNiceTicks(ymin, ymax);
 
     // Color palette
     const colors = [
@@ -60,16 +99,24 @@ function FUNC_NAME(canvas, data) {
     // Draw grid
     ctx.strokeStyle = "#f0f0f0";
     ctx.lineWidth = 1;
-    for (let i = 1; i < 5; i++) {
-        const x = padding_left + (i / 5) * plotWidth;
-        const y = padding_top + (i / 5) * plotHeight;
+    
+    // Vertical grid lines (x-axis ticks)
+    xTicks.forEach(tickValue => {
+        const [px, _] = toPixel(tickValue, 0);
         ctx.beginPath();
-        ctx.moveTo(x, padding_top);
-        ctx.lineTo(x, padding_top + plotHeight);
-        ctx.moveTo(padding_left, y);
-        ctx.lineTo(padding_left + plotWidth, y);
+        ctx.moveTo(px, padding_top);
+        ctx.lineTo(px, padding_top + plotHeight);
         ctx.stroke();
-    }
+    });
+    
+    // Horizontal grid lines (y-axis ticks)
+    yTicks.forEach(tickValue => {
+        const [_, py] = toPixel(0, tickValue);
+        ctx.beginPath();
+        ctx.moveTo(padding_left, py);
+        ctx.lineTo(padding_left + plotWidth, py);
+        ctx.stroke();
+    });
 
     // Draw data series
     Object.entries(data).forEach(([name, series], index) => {
@@ -100,18 +147,30 @@ function FUNC_NAME(canvas, data) {
     // Draw axes labels
     ctx.fillStyle = "#333";
     ctx.font = "12px Arial";
+    
+    // X-axis labels
     ctx.textAlign = "center";
-    for (let i = 0; i <= 5; i++) {
-        const x = padding_left + (i / 5) * plotWidth;
-        const value = xmin + (i / 5) * (xmax - xmin);
-        ctx.fillText(value.toFixed(1), x, h - 10);
-    }
+    xTicks.forEach(tickValue => {
+        const [px, _] = toPixel(tickValue, 0);
+        // Format number nicely
+        const label = tickValue === 0 ? "0" :
+                     Math.abs(tickValue) < 0.01 ? tickValue.toExponential(1) : 
+                     tickValue % 1 === 0 ? tickValue.toString() : 
+                     tickValue.toFixed(2);
+        ctx.fillText(label, px, h - 10);
+    });
+    
+    // Y-axis labels
     ctx.textAlign = "right";
-    for (let i = 0; i <= 5; i++) {
-        const y = padding_top + plotHeight - (i / 5) * plotHeight;
-        const value = ymin + (i / 5) * (ymax - ymin);
-        ctx.fillText(value.toFixed(2), padding_left - 10, y + 4);
-    }
+    yTicks.forEach(tickValue => {
+        const [_, py] = toPixel(0, tickValue);
+        // Format number nicely
+        const label = tickValue === 0 ? "0" :
+                     Math.abs(tickValue) < 0.01 ? tickValue.toExponential(1) : 
+                     tickValue % 1 === 0 ? tickValue.toString() : 
+                     tickValue.toFixed(2);
+        ctx.fillText(label, padding_left - 10, py + 4);
+    });
 
     // Draw legend
     ctx.textAlign = "left";
