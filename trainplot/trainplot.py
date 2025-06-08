@@ -3,14 +3,15 @@ Minimal train-plot library for Jupyter notebooks.
 A simple plotting library for monitoring training progress.
 """
 
+import math
 import time
 import uuid
 import json
-from typing import Dict, List, Tuple, Any
 from collections import defaultdict
 from IPython.display import display, Javascript
 from IPython import get_ipython
 from .plotting_function import js_code
+import numpy as np
 
 
 class TrainPlotFigure:
@@ -20,30 +21,25 @@ class TrainPlotFigure:
         """Create a figure for training plots."""
         self.width = width
         self.height = height
-        self.data: Dict[str, List[Tuple[float, float]]] = {}
+        self.data: "dict[str, list[float]]" = {}
 
         # Generate unique identifiers for this figure
         js_id = uuid.uuid4().hex[:8]
         self._js_figure_id = f"trainplot_figure_{js_id}"
         self._js_func_name = f"renderTrainPlot_{js_id}"
 
-    def update_data(self, data: Dict[str, List[Tuple[float, float]]]):
+    def update(self, data: "dict[str, list[float]]", reduction_factor: int, max_step: int):
         """Update the figure with new data."""
-        self.data = data.copy()
-
-    def update_display(self):
-        """Update the display in Jupyter notebook."""
-        update_js = f"""
-        (function() {{
-            const data = {json.dumps(self.data)};
-            const el = document.getElementById('{self._js_figure_id}');
-            if (!el) return;
-            const canvas = el.querySelector('canvas');
-            if (!canvas) return;
-            window.{self._js_func_name}(canvas, data);
-        }})();
-        """
-        display(Javascript(update_js))
+        display(Javascript(f"""
+            (function() {{
+                const data = {json.dumps(data)};
+                const el = document.getElementById('{self._js_figure_id}');
+                if (!el) return;
+                const canvas = el.querySelector('canvas');
+                if (!canvas) return;
+                window.{self._js_func_name}(canvas, data, {reduction_factor}, {max_step});
+            }})();
+        """))
 
     def _get_render_js(self):
         """Get the complete JavaScript code for rendering."""
@@ -84,21 +80,29 @@ class TrainPlotFigure:
 class TrainPlot:
     """Main TrainPlot class for monitoring training progress."""
 
-    def __init__(self, update_period: float = 0.1, width: int = 600, height: int = 400):
+    def __init__(self, update_period: float = 0.1, width: int = 600, height: int = 400, max_points: int = 20):
         """Create a TrainPlot instance."""
         if update_period < 0:
             raise ValueError(f'update_period must be positive, got {update_period}')
+        if max_points < 2:
+            raise ValueError(f'max_points must be at least 2, got {max_points}')
+        if max_points % 2 != 0:
+            raise ValueError(f'max_points must be even, got {max_points}')
 
         self.update_period = update_period
-        self.data: Dict[str, List[Tuple[float, float]]] = {}
-        self.update_step = 0
-        self.last_update = 0
+        self.max_points = max_points
+        self.data: "dict[str, np.ndarray]" = {}
+        self.counts: "dict[str, np.ndarray]" = {}
+        self.current_step = -1
+        self.max_step = 0
+        self.reduction_factor = 1
+        self.last_update_time = 0
         self.figure = TrainPlotFigure(width, height)
 
         if ENV.ipython_instance is not None:
             display(self.figure)
 
-    def update(self, **kwargs):
+    def update(self, step: "int | None" = None, **kwargs):
         """Update the data, which will be plotted as soon as `update_period` has passed since the last plot.
 
         You can also call the TrainPlot object directly, which is equivalent to calling this function.
@@ -113,20 +117,38 @@ class TrainPlot:
             # or
             trainplot(step=10, loss=0.05, accuracy=0.95)
         """
-        update_step = self.update_step
-        for key, value in kwargs.items():
-            if key == 'step':
-                update_step = value
-            elif key == 'epoch':
-                raise NotImplementedError('Epochs not supported yet')
-            elif key not in self.data:
-                self.data[key] = [(update_step, value)]
-            else:
-                self.data[key].append((update_step, value))
-        self.update_step += 1
+        if step is None:
+            step = self.current_step + 1
+        self.current_step = step
+        self.max_step = max(self.max_step, step)
+        i = step // self.reduction_factor
 
-        if time.time() - self.last_update > self.update_period:
-            self.last_update = time.time()
+        # add missing keys
+        for key in kwargs.keys():
+            if key != 'step' and key not in self.data:
+                self.data[key] = np.full(self.max_points, np.nan, dtype=np.float32)
+                self.counts[key] = np.full(self.max_points, 0, dtype=np.int32)
+
+        # reduce data to first half if max_step is reached
+        if i >= self.max_points:
+            self.reduction_factor *= 2
+            i = step // self.reduction_factor
+            for key in self.data:
+                prev_data = self.data[key].copy()
+                prev_counts = self.counts[key].copy()
+                self.data[key][:] = np.nan
+                self.counts[key][:] = 0
+                self.data[key][:self.max_points//2] = (prev_data[::2] + prev_data[1::2]) / 2
+                self.counts[key][:self.max_points//2] = prev_counts[::2] + prev_counts[1::2]
+
+        for key in self.data:
+            if key in kwargs:
+                self.counts[key][i] += 1
+                c = self.counts[key][i]
+                self.data[key][i] = np.nansum([(c-1)/c * self.data[key][i], 1/c * kwargs[key]])
+
+        if time.time() - self.last_update_time > self.update_period:
+            self.last_update_time = time.time()
             self.update_plot()
 
         ENV.currently_active_trainplot_objects.add(self)
@@ -134,8 +156,9 @@ class TrainPlot:
     def update_plot(self):
         """Update the plot with the current data."""
         if ENV.ipython_instance is not None:
-            self.figure.update_data(self.data)
-            self.figure.update_display()
+            data_length = self.max_step // self.reduction_factor + 1
+            data = {key: self.data[key][:data_length].tolist() for key in self.data}
+            self.figure.update(data, self.reduction_factor, self.max_step)
 
     def __call__(self, **kwargs):
         """Shortcut for update function."""

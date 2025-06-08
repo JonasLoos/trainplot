@@ -1,5 +1,5 @@
 js_code = """
-function FUNC_NAME(canvas, data) {
+function FUNC_NAME(canvas, data, reduction_factor, max_step) {
     const ctx = canvas.getContext("2d");
     const w = canvas.width = WIDTH;
     const h = canvas.height = HEIGHT;
@@ -27,11 +27,10 @@ function FUNC_NAME(canvas, data) {
     }
 
     // Calculate global bounds
-    let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+    let xmin = 0, xmax = max_step/reduction_factor, ymin = Infinity, ymax = -Infinity;
     Object.values(data).forEach(series => {
-        series.forEach(([x, y]) => {
-            xmin = Math.min(xmin, x);
-            xmax = Math.max(xmax, x);
+        xmax = Math.max(xmax, series.length - 1);
+        series.forEach(y => {
             ymin = Math.min(ymin, y);
             ymax = Math.max(ymax, y);
         });
@@ -87,7 +86,7 @@ function FUNC_NAME(canvas, data) {
     ];
 
     // Get nice tick values
-    const xTicks = getNiceTicks(xmin, xmax);
+    const xTicks = getNiceTicks(xmin*reduction_factor, xmax*reduction_factor);
     const yTicks = getNiceTicks(ymin, ymax);
 
     // Color palette
@@ -102,7 +101,7 @@ function FUNC_NAME(canvas, data) {
 
     // Vertical grid lines (x-axis ticks)
     xTicks.forEach(tickValue => {
-        const [px, _] = toPixel(tickValue, 0);
+        const [px, _] = toPixel(tickValue/reduction_factor, 0);
         ctx.beginPath();
         ctx.moveTo(px, padding_top);
         ctx.lineTo(px, padding_top + plotHeight);
@@ -128,16 +127,16 @@ function FUNC_NAME(canvas, data) {
 
         // Draw line
         ctx.beginPath();
-        series.forEach(([x, y], i) => {
-            const [px, py] = toPixel(x, y);
+        series.forEach((y, i) => {
+            const [px, py] = toPixel(i, y);
             if (i === 0) ctx.moveTo(px, py);
             else ctx.lineTo(px, py);
         });
         ctx.stroke();
 
         // Draw points
-        series.forEach(([x, y]) => {
-            const [px, py] = toPixel(x, y);
+        series.forEach((y, i) => {
+            const [px, py] = toPixel(i, y);
             ctx.beginPath();
             ctx.arc(px, py, 3, 0, 2 * Math.PI);
             ctx.fill();
@@ -151,7 +150,7 @@ function FUNC_NAME(canvas, data) {
     // X-axis labels
     ctx.textAlign = "center";
     xTicks.forEach(tickValue => {
-        const [px, _] = toPixel(tickValue, 0);
+        const [px, _] = toPixel(tickValue/reduction_factor, 0);
         // Format number nicely
         const label = tickValue === 0 ? "0" :
                      Math.abs(tickValue) < 0.01 ? tickValue.toExponential(1) :
@@ -201,12 +200,12 @@ function FUNC_NAME(canvas, data) {
         let nearestSeries = null;
 
         Object.entries(data).forEach(([seriesName, series]) => {
-            series.forEach(([x, y]) => {
-                const [px, py] = toPixel(x, y);
+            series.forEach((y, i) => {
+                const [px, py] = toPixel(i, y);
                 const distance = Math.sqrt((mouseX - px) ** 2 + (mouseY - py) ** 2);
                 if (distance < minDistance && distance < 20) { // Only consider points within 20 pixels
                     minDistance = distance;
-                    nearestPoint = [x, y];
+                    nearestPoint = [i, y];
                     nearestSeries = seriesName;
                 }
             });
@@ -223,7 +222,8 @@ function FUNC_NAME(canvas, data) {
         const seriesName = pointInfo.series;
 
         // Format the values
-        const xLabel = x % 1 === 0 ? x.toString() : x.toFixed(3);
+        const xTick = x * reduction_factor;
+        const xLabel = xTick % 1 === 0 ? xTick.toString() : xTick.toFixed(3);
         const yLabel = y % 1 === 0 ? y.toString() : y.toFixed(3);
         const text = `${seriesName}: (${xLabel}, ${yLabel})`;
 
@@ -266,7 +266,7 @@ function FUNC_NAME(canvas, data) {
     // Redraw function that includes hover effects
     const redrawWithHover = (mouseX, mouseY) => {
         // Redraw the base plot
-        FUNC_NAME(canvas, data);
+        FUNC_NAME(canvas, data, reduction_factor, max_step);
 
         // Add hover effects if mouse is over the plot area
         if (mouseX >= padding_left && mouseX <= w - padding_right &&
@@ -289,7 +289,7 @@ function FUNC_NAME(canvas, data) {
 
     const handleMouseLeave = () => {
         // Redraw without hover effects
-        FUNC_NAME(canvas, data);
+        FUNC_NAME(canvas, data, reduction_factor, max_step);
     };
 
     // Remove existing event listeners if any
