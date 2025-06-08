@@ -3,16 +3,19 @@ function FUNC_NAME(canvas, data) {
     const ctx = canvas.getContext("2d");
     const w = canvas.width = WIDTH;
     const h = canvas.height = HEIGHT;
-    const padding = 60;
-    const plotWidth = w - 2 * padding;
-    const plotHeight = h - 2 * padding;
+    const padding_left = 60;
+    const padding_top = 20;
+    const padding_right = 20;
+    const padding_bottom = 40;
+    const plotWidth = w - padding_left - padding_right;
+    const plotHeight = h - padding_top - padding_bottom;
 
     // Clear canvas
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, w, h);
     ctx.strokeStyle = "#e0e0e0";
     ctx.lineWidth = 1;
-    ctx.strokeRect(padding, padding, plotWidth, plotHeight);
+    ctx.strokeRect(padding_left, padding_top, plotWidth, plotHeight);
 
     // Exit early if no data
     if (!data || Object.keys(data).length === 0) {
@@ -44,8 +47,8 @@ function FUNC_NAME(canvas, data) {
 
     // Helper function to convert data coordinates to pixel coordinates
     const toPixel = (x, y) => [
-        padding + (x - xmin) / (xmax - xmin) * plotWidth,
-        padding + plotHeight - (y - ymin) / (ymax - ymin) * plotHeight
+        padding_left + (x - xmin) / (xmax - xmin) * plotWidth,
+        padding_top + plotHeight - (y - ymin) / (ymax - ymin) * plotHeight
     ];
 
     // Color palette
@@ -58,13 +61,13 @@ function FUNC_NAME(canvas, data) {
     ctx.strokeStyle = "#f0f0f0";
     ctx.lineWidth = 1;
     for (let i = 1; i < 5; i++) {
-        const x = padding + (i / 5) * plotWidth;
-        const y = padding + (i / 5) * plotHeight;
+        const x = padding_left + (i / 5) * plotWidth;
+        const y = padding_top + (i / 5) * plotHeight;
         ctx.beginPath();
-        ctx.moveTo(x, padding);
-        ctx.lineTo(x, padding + plotHeight);
-        ctx.moveTo(padding, y);
-        ctx.lineTo(padding + plotWidth, y);
+        ctx.moveTo(x, padding_top);
+        ctx.lineTo(x, padding_top + plotHeight);
+        ctx.moveTo(padding_left, y);
+        ctx.lineTo(padding_left + plotWidth, y);
         ctx.stroke();
     }
 
@@ -99,28 +102,30 @@ function FUNC_NAME(canvas, data) {
     ctx.font = "12px Arial";
     ctx.textAlign = "center";
     for (let i = 0; i <= 5; i++) {
-        const x = padding + (i / 5) * plotWidth;
+        const x = padding_left + (i / 5) * plotWidth;
         const value = xmin + (i / 5) * (xmax - xmin);
         ctx.fillText(value.toFixed(1), x, h - 10);
     }
     ctx.textAlign = "right";
     for (let i = 0; i <= 5; i++) {
-        const y = padding + plotHeight - (i / 5) * plotHeight;
+        const y = padding_top + plotHeight - (i / 5) * plotHeight;
         const value = ymin + (i / 5) * (ymax - ymin);
-        ctx.fillText(value.toFixed(2), padding - 10, y + 4);
+        ctx.fillText(value.toFixed(2), padding_left - 10, y + 4);
     }
 
     // Draw legend
     ctx.textAlign = "left";
     ctx.font = "12px Arial";
-    let legendY = padding + 20;
+    ctx.fillStyle = "#fff8";
+    ctx.fillRect(w - 155, padding_top, 155, Object.keys(data).length * 18 + 10);  // semi-transparent background
+    let legendY = padding_top + 18;
     Object.entries(data).forEach(([name, _], index) => {
         const color = colors[index % colors.length];
         ctx.fillStyle = color;
-        ctx.fillRect(w - 150, legendY - 8, 12, 12);
+        ctx.fillRect(w - 150, legendY - 10, 10, 10);  // square
         ctx.fillStyle = "#333";
-        ctx.fillText(name, w - 130, legendY);
-        legendY += 20;
+        ctx.fillText(name, w - 135, legendY);  // text
+        legendY += 18;
     });
 }
 window.FUNC_NAME = FUNC_NAME;
