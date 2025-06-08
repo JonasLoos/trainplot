@@ -186,6 +186,121 @@ function FUNC_NAME(canvas, data) {
         ctx.fillText(name, w - 135, legendY);  // text
         legendY += 18;
     });
+
+    // Store data and helper functions for hover functionality
+    canvas.plotData = data;
+    canvas.toPixel = toPixel;
+    canvas.colors = colors;
+    canvas.padding = { left: padding_left, top: padding_top, right: padding_right, bottom: padding_bottom };
+    canvas.plotBounds = { xmin, xmax, ymin, ymax };
+
+    // Helper function to find nearest point to mouse position
+    const findNearestPoint = (mouseX, mouseY) => {
+        let nearestPoint = null;
+        let minDistance = Infinity;
+        let nearestSeries = null;
+
+        Object.entries(data).forEach(([seriesName, series]) => {
+            series.forEach(([x, y]) => {
+                const [px, py] = toPixel(x, y);
+                const distance = Math.sqrt((mouseX - px) ** 2 + (mouseY - py) ** 2);
+                if (distance < minDistance && distance < 20) { // Only consider points within 20 pixels
+                    minDistance = distance;
+                    nearestPoint = [x, y];
+                    nearestSeries = seriesName;
+                }
+            });
+        });
+
+        return nearestPoint ? { point: nearestPoint, series: nearestSeries, distance: minDistance } : null;
+    };
+
+    // Helper function to draw tooltip
+    const drawTooltip = (mouseX, mouseY, pointInfo) => {
+        if (!pointInfo) return;
+
+        const [x, y] = pointInfo.point;
+        const seriesName = pointInfo.series;
+
+        // Format the values
+        const xLabel = x % 1 === 0 ? x.toString() : x.toFixed(3);
+        const yLabel = y % 1 === 0 ? y.toString() : y.toFixed(3);
+        const text = `${seriesName}: (${xLabel}, ${yLabel})`;
+
+        // Measure text to size tooltip
+        ctx.font = "12px Arial";
+        const textWidth = ctx.measureText(text).width;
+        const tooltipWidth = textWidth + 12;
+        const tooltipHeight = 24;
+
+        // Position tooltip (avoid going off canvas)
+        let tooltipX = mouseX + 10;
+        let tooltipY = mouseY - 10;
+        
+        if (tooltipX + tooltipWidth > w) tooltipX = mouseX - tooltipWidth - 10;
+        if (tooltipY - tooltipHeight < 0) tooltipY = mouseY + tooltipHeight + 10;
+
+        // Draw tooltip background
+        ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+        ctx.fillRect(tooltipX, tooltipY - tooltipHeight, tooltipWidth, tooltipHeight);
+
+        // Draw tooltip text
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "left";
+        ctx.fillText(text, tooltipX + 6, tooltipY - 8);
+
+        // Highlight the nearest point
+        const [px, py] = toPixel(x, y);
+        const seriesIndex = Object.keys(data).indexOf(seriesName);
+        const color = colors[seriesIndex % colors.length];
+        
+        ctx.strokeStyle = "#fff";
+        ctx.fillStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, 6, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+    };
+
+    // Redraw function that includes hover effects
+    const redrawWithHover = (mouseX, mouseY) => {
+        // Redraw the base plot
+        FUNC_NAME(canvas, data);
+        
+        // Add hover effects if mouse is over the plot area
+        if (mouseX >= padding_left && mouseX <= w - padding_right && 
+            mouseY >= padding_top && mouseY <= h - padding_bottom) {
+            const nearestPoint = findNearestPoint(mouseX, mouseY);
+            if (nearestPoint) {
+                drawTooltip(mouseX, mouseY, nearestPoint);
+            }
+        }
+    };
+
+    // Mouse event handlers
+    const handleMouseMove = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+        
+        redrawWithHover(mouseX, mouseY);
+    };
+
+    const handleMouseLeave = () => {
+        // Redraw without hover effects
+        FUNC_NAME(canvas, data);
+    };
+
+    // Remove existing event listeners if any
+    canvas.removeEventListener('mousemove', canvas._handleMouseMove);
+    canvas.removeEventListener('mouseleave', canvas._handleMouseLeave);
+
+    // Add new event listeners
+    canvas._handleMouseMove = handleMouseMove;
+    canvas._handleMouseLeave = handleMouseLeave;
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
 }
 window.FUNC_NAME = FUNC_NAME;
 """
