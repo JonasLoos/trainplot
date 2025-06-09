@@ -80,7 +80,7 @@ class TrainPlotFigure:
 class TrainPlot:
     """Main TrainPlot class for monitoring training progress."""
 
-    def __init__(self, update_period: float = 0.1, width: int = 600, height: int = 400, max_points: int = 20):
+    def __init__(self, update_period: float = 0.1, width: int = 600, height: int = 400, max_points: int = 100):
         """Create a TrainPlot instance."""
         if update_period < 0:
             raise ValueError(f'update_period must be positive, got {update_period}')
@@ -134,18 +134,15 @@ class TrainPlot:
             self.reduction_factor *= 2
             i = step // self.reduction_factor
             for key in self.data:
-                prev_data = self.data[key].copy()
-                prev_counts = self.counts[key].copy()
-                self.data[key][:] = np.nan
-                self.counts[key][:] = 0
-                self.data[key][:self.max_points//2] = (prev_data[::2] + prev_data[1::2]) / 2
-                self.counts[key][:self.max_points//2] = prev_counts[::2] + prev_counts[1::2]
-
+                self.data[key][:self.max_points//2] = np.nanmean([self.data[key][::2], self.data[key][1::2]], axis=0)
+                self.counts[key][:self.max_points//2] = self.counts[key][::2] + self.counts[key][1::2]
+                self.data[key][self.max_points//2:] = np.nan
+                self.counts[key][self.max_points//2:] = 0
         for key in self.data:
             if key in kwargs:
                 self.counts[key][i] += 1
                 c = self.counts[key][i]
-                self.data[key][i] = np.nansum([(c-1)/c * self.data[key][i], 1/c * kwargs[key]])
+                self.data[key][i] = kwargs[key] if c == 1 else (c-1)/c * self.data[key][i] + 1/c * kwargs[key]
 
         if time.time() - self.last_update_time > self.update_period:
             self.last_update_time = time.time()
