@@ -29,8 +29,6 @@ MANIFEST
 uv.lock
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -40,3 +38,6 @@ pip-delete-this-directory.txt
 
 # generated version file by setuptools_scm
 _version.py
+
+# other
+.ipynb_checkpoints/
