@@ -3,10 +3,12 @@
 Dynamically updating plots in Jupyter notebooks, e.g. for visualizing machine learning training progress.
 
 ```bash
+
 pip install trainplot
 ```
 
-<img src="https://github.com/JonasLoos/trainplot/assets/33965649/935e8d52-0c37-4469-9cb8-24fa77b467ff" width="500">
+<p align="center"><img src="https://github.com/user-attachments/assets/03bd661c-37d7-41a4-ba91-891f57ebfcf8" width="400" center></p>
+
 
 
 ## Usage
