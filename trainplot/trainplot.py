@@ -1,80 +1,23 @@
-"""
-Minimal train-plot library for Jupyter notebooks.
-A simple plotting library for monitoring training progress.
-"""
-
-import math
 import time
-import uuid
-import json
 from collections import defaultdict
-from IPython.display import display, Javascript
+from IPython.display import display
 from IPython import get_ipython
-from .plotting_function import js_code
 import numpy as np
+import anywidget
+import traitlets
+from .plotting_function import js_code
 
 
-class TrainPlotFigure:
-    """A custom figure class for training plots that renders using HTML5 Canvas."""
+class TrainPlotWidget(anywidget.AnyWidget):
+    """A custom widget for training plots that renders using HTML5 Canvas."""
 
-    def __init__(self, width: int = 600, height: int = 400):
-        """Create a figure for training plots."""
-        self.width = width
-        self.height = height
-        self.data: "dict[str, list[float]]" = {}
-
-        # Generate unique identifiers for this figure
-        js_id = uuid.uuid4().hex[:8]
-        self._js_figure_id = f"trainplot_figure_{js_id}"
-        self._js_func_name = f"renderTrainPlot_{js_id}"
-
-    def update(self, data: "dict[str, list[float]]", reduction_factor: int, max_step: int):
-        """Update the figure with new data."""
-        display(Javascript(f"""
-            (function() {{
-                const data = {json.dumps(data)};
-                const el = document.getElementById('{self._js_figure_id}');
-                if (!el) return;
-                const canvas = el.querySelector('canvas');
-                if (!canvas) return;
-                window.{self._js_func_name}(canvas, data, {reduction_factor}, {max_step});
-            }})();
-        """))
-
-    def _get_render_js(self):
-        """Get the complete JavaScript code for rendering."""
-        replacements = {
-            'FUNC_NAME': self._js_func_name,
-            'WIDTH': str(self.width),
-            'HEIGHT': str(self.height)
-        }
-        result = js_code
-        for key, value in replacements.items():
-            result = result.replace(key, value)
-        return result
-
-    def _repr_mimebundle_(self, include=None, exclude=None):
-        """Return MIME bundle for Jupyter display protocol."""
-        html_content = f"""
-        <div id="{self._js_figure_id}" style="width: {self.width}px; height: {self.height}px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;"></div>
-        <script>
-        {self._get_render_js()}
-        (function() {{
-            const data = {json.dumps(self.data)};
-            const el = document.getElementById('{self._js_figure_id}');
-            if (!el) return;
-            const canvas = document.createElement("canvas");
-            canvas.style.display = "block";
-            el.appendChild(canvas);
-            {self._js_func_name}(canvas, data);
-        }})();
-        </script>
-        """
-        data_summary = f"{len(self.data)} series" if self.data else "no data"
-        return {
-            "text/html": html_content,
-            "text/plain": f"<TrainPlotFigure with {data_summary}>"
-        }
+    # Synchronized state between Python and JavaScript
+    data = traitlets.Dict({}).tag(sync=True)
+    reduction_factor = traitlets.Int(1).tag(sync=True)
+    max_step = traitlets.Int(0).tag(sync=True)
+    width = traitlets.Int(600).tag(sync=True)
+    height = traitlets.Int(400).tag(sync=True)
+    _esm = js_code
 
 
 class TrainPlot:
@@ -97,10 +40,12 @@ class TrainPlot:
         self.max_step = 0
         self.reduction_factor = 1
         self.last_update_time = 0
-        self.figure = TrainPlotFigure(width, height)
+
+        # Create anywidget instance
+        self.widget = TrainPlotWidget(width=width, height=height)
 
         if ENV.ipython_instance is not None:
-            display(self.figure)
+            display(self.widget)
 
     def update(self, step: "int | None" = None, **kwargs):
         """Update the data, which will be plotted as soon as `update_period` has passed since the last plot.
@@ -155,7 +100,12 @@ class TrainPlot:
         if ENV.ipython_instance is not None:
             data_length = self.max_step // self.reduction_factor + 1
             data = {key: self.data[key][:data_length].tolist() for key in self.data}
-            self.figure.update(data, self.reduction_factor, self.max_step)
+
+            # Update widget state and trigger a re-render in JavaScript
+            self.widget.data = data
+            self.widget.reduction_factor = self.reduction_factor
+            self.widget.max_step = self.max_step
+            self.widget.send({'render': True})
 
     def __call__(self, **kwargs):
         """Shortcut for update function."""

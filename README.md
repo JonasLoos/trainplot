@@ -1,6 +1,6 @@
 # trainplot
 
-Dynamically updating plots in Jupyter notebooks, e.g. for visualizing training progress. Inspired by [livelossplot](https://github.com/stared/livelossplot), with better Jupyter notebook support and minimal dependencies.
+Dynamically updating plots in Jupyter notebooks, e.g. for visualizing machine learning training progress.
 
 ```bash
 pip install trainplot
@@ -11,25 +11,27 @@ pip install trainplot
 
 ## Usage
 
-Simple example ([example notebook](examples/basic-example.ipynb)):
+Basic usage:
 
 ```python
 from trainplot import plot
-from time import sleep
 
-for i in range(50):
-    plot(loss = 1/(i+1), acc = 1-1/(.01*i**2+1))
-    sleep(.1)
+for i in range(100):
+    loss = ...
+    acc = ...
+    plot(loss=loss, accuracy=acc)
 ```
 
-Example for the tf/keras callback ([example notebook](examples/tf-keras-mnist-example.ipynb)):
+If you use keras, you can use the `TrainPlotKerasCallback`:
 
 ```python
 from trainplot import TrainPlotKeras
 
 model = ...
-model.fit(x_train, y_train, validation_data=(x_test, y_test), epochs=10, callbacks=[TrainPlotKeras()])
+model.fit(x_train, y_train, validation_data=(x_test, y_test), epochs=10, callbacks=[TrainPlotKerasCallback()])
 ```
+
+For more examples, see the [`examples`](examples/) folder.
 
 
 ## Features
@@ -39,6 +41,7 @@ model.fit(x_train, y_train, validation_data=(x_test, y_test), epochs=10, callbac
 * **Multiple series**: Automatically handles multiple data series with different colors
 * **Real-time updates**: Configurable update periods to balance performance and responsiveness
 * **Keras support**: Built-in callback for TensorFlow/Keras models
+
 
 ## How it works
 
