@@ -47,4 +47,4 @@ For more examples, see the [`examples`](examples/) folder.
 
 ## How it works
 
-Trainplot uses a custom HTML5 Canvas-based plotting solution that renders directly in Jupyter notebooks. To avoid wasting resources and flickering, the plot is only updated with a given `update_period`. A `post_run_cell` callback is added to the `IPython` instance, so that all updated TrainPlot figures include all new data when a cell execution is finished. When using `trainplot.plot`, a TrainPlot object is created for the current cell.
+Trainplot uses a custom HTML5 Canvas-based plotting solution that renders directly in Jupyter notebooks. For synchonization between Python and the JavaScript-based plotting function, [`anywidget`](https://github.com/manzt/anywidget) is used. To avoid wasting resources and flickering, the plot is only updated with a given `update_period`. A `post_run_cell` callback is added to the `IPython` instance, so that all updated TrainPlot figures include all new data when a cell execution is finished. When using `trainplot.plot`, a TrainPlot object is created for the current cell.
