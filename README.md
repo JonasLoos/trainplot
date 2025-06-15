@@ -1,3 +1,6 @@
+[![PyPI](https://img.shields.io/pypi/v/trainplot?logo=pypi)](https://pypi.org/project/trainplot/)
+[![Downloads](https://img.shields.io/pypi/dm/trainplot)](https://pypi.org/project/trainplot/)
+
 # trainplot
 
 Dynamically updating plots in Jupyter notebooks, e.g. for visualizing machine learning training progress.
@@ -40,10 +43,10 @@ for i in range(100):
     sleep(0.05)
 ```
 
-If you use keras, you can use the `TrainPlotKerasCallback`:
+For keras, you can use the `TrainPlotKerasCallback`:
 
 ```python
-from trainplot import TrainPlotKeras
+from trainplot import TrainPlotKerasCallback
 
 model = ...
 model.fit(x_train, y_train, validation_data=(x_test, y_test), epochs=10, callbacks=[TrainPlotKerasCallback()])
